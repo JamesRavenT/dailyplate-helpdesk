@@ -1,9 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { authClient } from '../lib/auth-client'
 
 export default function Navbar() {
   const { data: session } = authClient.useSession()
   const navigate = useNavigate()
+  const isAdmin = (session?.user as any)?.role === 'ADMIN'
 
   const handleSignOut = async () => {
     await authClient.signOut()
@@ -12,7 +13,23 @@ export default function Navbar() {
 
   return (
     <nav className="border-b bg-white px-6 py-3 flex items-center justify-between">
-      <span className="font-semibold text-gray-800">Helpdesk</span>
+      <div className="flex items-center gap-6">
+        <span className="font-semibold text-gray-800">Helpdesk</span>
+        <Link
+          to="/"
+          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          Dashboard
+        </Link>
+        {isAdmin && (
+          <Link
+            to="/users"
+            className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            Users
+          </Link>
+        )}
+      </div>
       {session && (
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-600">{session.user.name}</span>

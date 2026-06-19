@@ -1,8 +1,10 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Login from './pages/Login'
 import Home from './pages/Home'
+import Users from './pages/Users'
 import NotFound from './pages/NotFound'
 import ProtectedRoute from './components/ProtectedRoute'
+import AdminRoute from './components/AdminRoute'
 
 function App() {
   return (
@@ -15,6 +17,14 @@ function App() {
             <ProtectedRoute>
               <Home />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <AdminRoute>
+              <Users />
+            </AdminRoute>
           }
         />
         <Route path="*" element={<NotFound />} />

@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import rateLimit from 'express-rate-limit'
 import { toNodeHandler } from 'better-auth/node'
 import { auth } from './lib/auth.ts'
 import { router } from './routes/index.ts'
@@ -14,6 +15,15 @@ app.use(cors({
   origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   credentials: true,
 }))
+
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api/auth/sign-in', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+  }))
+}
 
 // Must be before express.json() — Better Auth parses its own request bodies
 app.all('/api/auth/*', toNodeHandler(auth))

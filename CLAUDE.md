@@ -106,3 +106,27 @@ cd frontend && npm run dev  # http://localhost:5173
 ```
 
 Frontend proxies `/api` and `/health` to the backend — no CORS issues in dev.
+
+---
+
+## E2E Testing
+
+**Always use the `playwright-e2e-writer` agent to write e2e tests** — invoke it via the Agent tool, never write Playwright tests by hand in the main conversation.
+
+Tests live in `e2e/tests/`. The infrastructure (`playwright.config.ts`, `global-setup.ts`, test database) is already configured.
+
+```bash
+# Start test database (required before running tests)
+docker compose up postgres-test -d
+
+# Run tests
+cd e2e && npm test          # headless
+cd e2e && npm run test:ui   # interactive
+```
+
+Test users (seeded automatically by `global-setup.ts`):
+
+| Email | Password | Role |
+|---|---|---|
+| admin@test.com | Admin@731 | ADMIN |
+| agent@test.com | agent@731 | AGENT |

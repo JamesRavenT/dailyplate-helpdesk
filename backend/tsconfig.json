@@ -15,6 +15,6 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "prisma/**/*"],
   "exclude": ["node_modules"]
 }

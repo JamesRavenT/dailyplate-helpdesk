@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketCategory {
+  GENERAL_QUERY
+  TECHNICAL
+  BILLING
+  REFUND
+  ACCOUNT_ACCESS
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Severity {
+  MINOR
+  MAJOR
+  CRITICAL
+}
+
+enum SenderType {
+  CUSTOMER
+  AGENT
+  AI
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  password_hash String
+  role          Role     @default(AGENT)
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  tickets       Ticket[] @relation("AssignedTickets")
+}
+
+model Ticket {
+  id                     String          @id @default(cuid())
+  subject                String
+  customer_name          String
+  customer_email         String
+  status                 TicketStatus    @default(OPEN)
+  category               TicketCategory?
+  priority               Priority?
+  severity               Severity?
+  assigned_to_id         String?
+  assigned_to            User?           @relation("AssignedTickets", fields: [assigned_to_id], references: [id])
+  email_thread_id        String?         @unique
+  is_ai_handled          Boolean         @default(false)
+  last_customer_reply_at DateTime?
+  created_at             DateTime        @default(now())
+  updated_at             DateTime        @updatedAt
+  messages               Message[]
+}
+
+model Message {
+  id          String     @id @default(cuid())
+  ticket_id   String
+  ticket      Ticket     @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  body        String
+  sender_type SenderType
+  sent_at     DateTime   @default(now())
+}
+
+model KnowledgeBaseFile {
+  id         String   @id @default(cuid())
+  filename   String   @unique
+  content    String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+model SystemConfig {
+  key   String @id
+  value String
+}
+
+model RoundRobinState {
+  id            Int     @id @default(1)
+  last_agent_id String?
+}

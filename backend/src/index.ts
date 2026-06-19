@@ -1,6 +1,8 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import { toNodeHandler } from 'better-auth/node'
+import { auth } from './lib/auth.ts'
 import { router } from './routes/index.ts'
 
 dotenv.config()
@@ -12,6 +14,9 @@ app.use(cors({
   origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   credentials: true,
 }))
+
+// Must be before express.json() — Better Auth parses its own request bodies
+app.all('/api/auth/*', toNodeHandler(auth))
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))

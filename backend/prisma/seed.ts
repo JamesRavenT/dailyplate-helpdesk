@@ -1,45 +1,25 @@
-import { PrismaClient, Role } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
+import 'dotenv/config'
+import { auth } from '../src/lib/auth.ts'
+import { prisma } from '../src/lib/prisma.ts'
+import { Role } from '@prisma/client'
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
-const prisma = new PrismaClient({ adapter })
+async function createUser(email: string, password: string, name: string, role: Role) {
+  const existing = await prisma.user.findUnique({ where: { email } })
+  if (existing) { console.log(`${email} already exists, skipping.`); return }
+
+  const result = await auth.api.signUpEmail({ body: { email, password, name } })
+  if (!result?.user) throw new Error(`Failed to create ${email}`)
+
+  if (role !== Role.AGENT) {
+    await prisma.user.update({ where: { id: result.user.id }, data: { role } })
+  }
+  console.log(`Created: ${email} (${role})`)
+}
 
 async function main() {
-  const adminHash = await Bun.password.hash('admin123')
-  const agentHash = await Bun.password.hash('agent123')
-
-  await prisma.user.upsert({
-    where: { email: 'admin@helpdesk.local' },
-    update: {},
-    create: {
-      name: 'Admin User',
-      email: 'admin@helpdesk.local',
-      password_hash: adminHash,
-      role: Role.ADMIN,
-    },
-  })
-
-  await prisma.user.upsert({
-    where: { email: 'agent1@helpdesk.local' },
-    update: {},
-    create: {
-      name: 'Agent One',
-      email: 'agent1@helpdesk.local',
-      password_hash: agentHash,
-      role: Role.AGENT,
-    },
-  })
-
-  await prisma.user.upsert({
-    where: { email: 'agent2@helpdesk.local' },
-    update: {},
-    create: {
-      name: 'Agent Two',
-      email: 'agent2@helpdesk.local',
-      password_hash: agentHash,
-      role: Role.AGENT,
-    },
-  })
+  await createUser('admin@helpdesk.local', 'admin123', 'Admin User', Role.ADMIN)
+  await createUser('agent1@helpdesk.local', 'agent123', 'Agent One', Role.AGENT)
+  await createUser('agent2@helpdesk.local', 'agent123', 'Agent Two', Role.AGENT)
 
   await prisma.systemConfig.upsert({
     where: { key: 'auto_close_days' },

@@ -1,20 +1,27 @@
+import { timingSafeEqual } from 'crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.ts'
 
 const inboundEmailSchema = z.object({
-  from_email: z.string().email('Invalid from_email'),
-  from_name: z.string().optional(),
-  subject: z.string().min(1, 'Subject is required'),
-  body: z.string().min(1, 'Body is required'),
-  message_id: z.string().optional(),
-  in_reply_to: z.string().optional(),
+  from_email: z.string().email('Invalid from_email').max(254),
+  from_name: z.string().max(200).optional(),
+  subject: z.string().min(1, 'Subject is required').max(500),
+  body: z.string().min(1, 'Body is required').max(100_000),
+  message_id: z.string().max(500).optional(),
+  in_reply_to: z.string().max(500).optional(),
 })
 
 export async function inboundEmail(req: Request, res: Response, next: NextFunction) {
   try {
     const secret = req.headers['x-webhook-secret']
-    if (!secret || secret !== process.env.WEBHOOK_SECRET) {
+    const expected = process.env.WEBHOOK_SECRET
+    const match =
+      typeof secret === 'string' &&
+      typeof expected === 'string' &&
+      secret.length === expected.length &&
+      timingSafeEqual(Buffer.from(secret), Buffer.from(expected))
+    if (!match) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 

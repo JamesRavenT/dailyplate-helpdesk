@@ -7,20 +7,26 @@ const listQuerySchema = z.object({
   sortOrder: z.enum(['asc', 'desc']).optional(),
   category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).optional(),
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
-  search: z.string().optional(),
+  search: z.string().max(200).optional(),
   page: z.string().optional(),
   pageSize: z.string().optional(),
 })
 
 const createMessageSchema = z.object({
-  body: z.string().min(1, 'Reply cannot be empty'),
+  body: z.string().min(1, 'Reply cannot be empty').max(20_000, 'Reply is too long'),
 })
 
-const updateTicketSchema = z.object({
+const adminUpdateTicketSchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().optional(),
   category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).nullable().optional(),
   assigned_to_id: z.string().nullable().optional(),
+})
+
+const agentUpdateTicketSchema = z.object({
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().optional(),
+  category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).nullable().optional(),
 })
 
 export async function listTickets(req: Request, res: Response, next: NextFunction) {
@@ -123,6 +129,11 @@ export async function getTicket(req: Request, res: Response, next: NextFunction)
       },
     })
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+    if (req.user!.role === 'AGENT' && ticket.assigned_to_id !== req.user!.id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
     res.json(ticket)
   } catch (err) { next(err) }
 }
@@ -130,13 +141,33 @@ export async function getTicket(req: Request, res: Response, next: NextFunction)
 export async function updateTicket(req: Request, res: Response, next: NextFunction) {
   try {
     const { id } = req.params
-    const parsed = updateTicketSchema.safeParse(req.body)
+    const isAdmin = req.user!.role === 'ADMIN'
+    const schema = isAdmin ? adminUpdateTicketSchema : agentUpdateTicketSchema
+    const parsed = schema.safeParse(req.body)
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0].message })
     }
 
     const existing = await prisma.ticket.findUnique({ where: { id } })
     if (!existing) return res.status(404).json({ error: 'Ticket not found' })
+
+    if (!isAdmin && existing.assigned_to_id !== req.user!.id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    // Validate the target user is an active agent before assigning
+    if (isAdmin) {
+      const adminData = parsed.data as z.infer<typeof adminUpdateTicketSchema>
+      if (adminData.assigned_to_id != null) {
+        const target = await prisma.user.findUnique({
+          where: { id: adminData.assigned_to_id },
+          select: { role: true, is_active: true },
+        })
+        if (!target || target.role !== 'AGENT' || !target.is_active) {
+          return res.status(400).json({ error: 'Invalid agent' })
+        }
+      }
+    }
 
     const updated = await prisma.ticket.update({
       where: { id },

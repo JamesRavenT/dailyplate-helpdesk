@@ -391,7 +391,7 @@ export default function TicketDetail() {
               {ticket.assigned_to ? 'Re-assign Agent' : 'Assign Agent'}
             </h2>
 
-            <div className="space-y-1">
+            <div className="space-y-1 max-h-64 overflow-y-auto">
               {ticket.assigned_to && (
                 <button
                   onClick={() => assignMutation.mutate(null)}

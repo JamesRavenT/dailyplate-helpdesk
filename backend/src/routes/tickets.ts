@@ -1,0 +1,9 @@
+import { Router } from 'express'
+import { requireAuth } from '../middleware/auth.ts'
+import { listTickets, getTicket, updateTicket } from '../controllers/tickets.ts'
+
+export const ticketsRouter = Router()
+
+ticketsRouter.get('/', requireAuth, listTickets)
+ticketsRouter.get('/:id', requireAuth, getTicket)
+ticketsRouter.patch('/:id', requireAuth, updateTicket)

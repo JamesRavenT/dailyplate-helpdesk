@@ -35,6 +35,17 @@ const _createAuth = betterAuth({
   emailAndPassword: { enabled: true },
 })
 
+export async function listAgents(_req: Request, res: Response, next: NextFunction) {
+  try {
+    const agents = await prisma.user.findMany({
+      where: { role: 'AGENT', is_active: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    })
+    res.json(agents)
+  } catch (err) { next(err) }
+}
+
 export async function listUsers(_req: Request, res: Response, next: NextFunction) {
   try {
     const users = await prisma.user.findMany({

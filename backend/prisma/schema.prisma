@@ -19,11 +19,11 @@ enum TicketStatus {
 }
 
 enum TicketCategory {
-  GENERAL_QUERY
-  TECHNICAL
-  BILLING
+  ACCOUNT
+  INQUIRY
   REFUND
-  ACCOUNT_ACCESS
+  TECHNICAL
+  VOUCHER
   OTHER
 }
 

@@ -21,6 +21,12 @@ export default function Navbar() {
         >
           Dashboard
         </Link>
+        <Link
+          to="/tickets"
+          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+        >
+          Tickets
+        </Link>
         {isAdmin && (
           <Link
             to="/users"

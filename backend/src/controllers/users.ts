@@ -9,6 +9,11 @@ const deleteUserSchema = z.object({
   adminPassword: z.string().min(1, 'Password is required'),
 })
 
+const setUserLockSchema = z.object({
+  adminPassword: z.string().min(1, 'Password is required'),
+  lock: z.boolean(),
+})
+
 const editUserSchema = z.object({
   name: z.string().min(3, 'Name must be at least 3 characters'),
   email: z.string().email('Enter a valid email'),
@@ -133,5 +138,40 @@ export async function deleteUser(req: Request, res: Response, next: NextFunction
     ])
 
     res.status(204).end()
+  } catch (err) { next(err) }
+}
+
+export async function setUserLock(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params
+    const parsed = setUserLockSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message })
+    }
+    const { adminPassword, lock } = parsed.data
+
+    const target = await prisma.user.findUnique({ where: { id } })
+    if (!target) return res.status(404).json({ error: 'User not found' })
+    if (target.role === 'ADMIN') return res.status(403).json({ error: 'Cannot lock an admin account' })
+
+    const adminAccount = await prisma.account.findFirst({
+      where: { userId: req.user!.id, providerId: 'credential' },
+    })
+    if (!adminAccount?.password) return res.status(500).json({ error: 'Admin credential not found' })
+
+    const valid = await verifyPassword({ hash: adminAccount.password, password: adminPassword })
+    if (!valid) return res.status(401).json({ error: 'Incorrect password' })
+
+    await prisma.user.update({ where: { id }, data: { is_active: !lock } })
+
+    if (lock) {
+      await prisma.session.deleteMany({ where: { userId: id } })
+    }
+
+    const updated = await prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true, is_active: true, createdAt: true },
+    })
+    res.json(updated)
   } catch (err) { next(err) }
 }

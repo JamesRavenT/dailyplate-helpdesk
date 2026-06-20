@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth'
+import { createAuthMiddleware, APIError } from 'better-auth/api'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { prisma } from './prisma.ts'
 
@@ -17,6 +18,17 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24,
   },
   trustedOrigins: [process.env.FRONTEND_URL ?? 'http://localhost:5173'],
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== '/sign-in/email') return
+      const email = ctx.body?.email as string | undefined
+      if (!email) return
+      const user = await prisma.user.findUnique({ where: { email }, select: { is_active: true } })
+      if (user && !user.is_active) {
+        throw new APIError('FORBIDDEN', { message: 'Account is locked' })
+      }
+    }),
+  },
 })
 
 export type SessionUser = typeof auth.$Infer.Session.user

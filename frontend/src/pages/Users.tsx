@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Lock, LockOpen, Pencil, Trash2 } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import { Skeleton } from '../components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import CreateUserDialog from '../components/CreateUserDialog'
 import EditUserDialog from '../components/EditUserDialog'
 import DeleteUserDialog from '../components/DeleteUserDialog'
+import LockUserDialog from '../components/LockUserDialog'
 
 type User = {
   id: string
@@ -28,6 +29,7 @@ export default function Users() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [deletingUser, setDeletingUser] = useState<User | null>(null)
+  const [lockingUser, setLockingUser] = useState<User | null>(null)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -47,6 +49,11 @@ export default function Users() {
           user={deletingUser}
           open={deletingUser !== null}
           onOpenChange={(open) => { if (!open) setDeletingUser(null) }}
+        />
+        <LockUserDialog
+          user={lockingUser}
+          open={lockingUser !== null}
+          onOpenChange={(open) => { if (!open) setLockingUser(null) }}
         />
 
         {isPending && (
@@ -70,7 +77,7 @@ export default function Users() {
                     <td className="px-4 py-3"><Skeleton className="h-5 w-14 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-14 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
-                    <td className="px-4 py-3"><Skeleton className="h-7 w-7 rounded-md" /></td>
+                    <td className="px-4 py-3"><div className="flex justify-end gap-1"><Skeleton className="h-7 w-7 rounded-md" /><Skeleton className="h-7 w-7 rounded-md" /><Skeleton className="h-7 w-7 rounded-md" /></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -140,6 +147,17 @@ export default function Users() {
                             aria-label={`Edit ${user.name}`}
                           >
                             <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => setLockingUser(user)}
+                            aria-label={user.is_active ? `Lock ${user.name}` : `Unlock ${user.name}`}
+                            className={user.role !== 'AGENT' ? 'invisible pointer-events-none' : ''}
+                          >
+                            {user.is_active
+                              ? <Lock className="h-4 w-4" />
+                              : <LockOpen className="h-4 w-4" />}
                           </Button>
                           <Button
                             variant="ghost"

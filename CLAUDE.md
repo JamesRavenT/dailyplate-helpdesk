@@ -95,6 +95,25 @@ Add components: `npx shadcn@latest add <component>` (run from `frontend/`)
 
 ---
 
+## API Calls (Frontend)
+
+Use **axios** for HTTP requests and **TanStack Query** (`@tanstack/react-query`) for data fetching, caching, and server state management.
+
+```ts
+// Define a typed fetcher with axios
+async function fetchUsers(): Promise<User[]> {
+  const { data } = await axios.get('/api/users')
+  return data
+}
+
+// Use in a component
+const { data, isPending, error } = useQuery({ queryKey: ['users'], queryFn: fetchUsers })
+```
+
+`QueryClientProvider` is already set up in `frontend/src/main.tsx`.
+
+---
+
 ## Dev Setup
 
 ```bash

@@ -114,6 +114,32 @@ const { data, isPending, error } = useQuery({ queryKey: ['users'], queryFn: fetc
 
 ---
 
+## Backend Validation
+
+Use **Zod** (`zod` is already installed in `backend/`) to validate request bodies in controllers. Define a schema at module scope and use `safeParse` — return the first issue message as `{ error: string }` with a 400 status.
+
+```ts
+import { z } from 'zod'
+
+const createFooSchema = z.object({
+  name: z.string().min(3, 'Name must be at least 3 characters'),
+  email: z.string().email('Enter a valid email'),
+})
+
+export async function createFoo(req: Request, res: Response, next: NextFunction) {
+  try {
+    const parsed = createFooSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message })
+    }
+    const { name, email } = parsed.data
+    // ...
+  } catch (err) { next(err) }
+}
+```
+
+---
+
 ## Dev Setup
 
 ```bash

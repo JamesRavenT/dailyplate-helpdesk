@@ -46,7 +46,7 @@ describe('Users page', () => {
     mockedGet.mockReturnValue(new Promise(() => {}))
     renderWithQuery(<Users />)
     const skeletons = document.querySelectorAll('[data-slot="skeleton"]')
-    expect(skeletons).toHaveLength(25) // 5 rows × 5 cells
+    expect(skeletons).toHaveLength(40) // 5 rows × (5 data cells + 3 action buttons)
   })
 
   it('renders the page heading', () => {

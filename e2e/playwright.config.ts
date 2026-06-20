@@ -14,14 +14,22 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'setup', testMatch: /setup\/auth-setup\.ts/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
+    },
   ],
   webServer: [
     {
       command: 'bun run --env-file=.env.test src/index.ts',
       cwd: path.resolve(__dirname, '../backend'),
       url: 'http://localhost:3001/health',
-      reuseExistingServer: !process.env.CI,
+      // Never reuse an existing backend — a dev server pointing at the dev DB
+      // would silently pass tests for users that exist there and fail for
+      // test-only users (e.g. admin@test.com).
+      reuseExistingServer: false,
       stdout: 'pipe',
       stderr: 'pipe',
     },

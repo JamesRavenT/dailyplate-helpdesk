@@ -173,7 +173,7 @@ export default function Tickets() {
       queryClient.setQueriesData<TicketsResponse>(
         { queryKey: ['tickets'] },
         (old) => {
-          if (!old) return old
+          if (!old || !Array.isArray((old as any).data)) return old
           return { ...old, data: old.data.map(t => t.id === id ? { ...t, assigned_to } : t) }
         },
       )
@@ -335,9 +335,11 @@ export default function Tickets() {
             className={`${controlClass} cursor-pointer`}
           >
             <option value="">All Statuses</option>
-            {(Object.keys(statusLabels) as TicketStatus[]).map(key => (
-              <option key={key} value={key}>{statusLabels[key]}</option>
-            ))}
+            {(Object.keys(statusLabels) as TicketStatus[])
+              .filter(key => isAdmin || key === 'OPEN' || key === 'IN_PROGRESS')
+              .map(key => (
+                <option key={key} value={key}>{statusLabels[key]}</option>
+              ))}
           </select>
 
           {hasFilters && (

@@ -12,6 +12,10 @@ const listQuerySchema = z.object({
   pageSize: z.string().optional(),
 })
 
+const createMessageSchema = z.object({
+  body: z.string().min(1, 'Reply cannot be empty'),
+})
+
 const updateTicketSchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().optional(),
@@ -31,15 +35,27 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
     const page = Math.max(1, parseInt(parsed.data.page ?? '1', 10) || 1)
     const pageSize = Math.min(100, Math.max(1, parseInt(parsed.data.pageSize ?? '10', 10) || 10))
 
-    const orderBy =
+    const primaryOrder =
       sortBy === 'assigned_to'
         ? { assigned_to: { name: sortOrder } }
         : { [sortBy]: sortOrder }
+    // Secondary sort by id keeps pagination stable when primary values are equal
+    const orderBy = [primaryOrder, { id: 'asc' as const }]
 
     const where: any = {
       ...(category && { category }),
-      ...(status && { status }),
-      ...(req.user!.role === 'AGENT' && { assigned_to_id: req.user!.id }),
+    }
+
+    if (req.user!.role === 'AGENT') {
+      where.assigned_to_id = req.user!.id
+      // Agents only see active tickets
+      if (status === 'OPEN' || status === 'IN_PROGRESS') {
+        where.status = status
+      } else {
+        where.status = { in: ['OPEN', 'IN_PROGRESS'] }
+      }
+    } else if (status) {
+      where.status = status
     }
     if (search) {
       where.OR = [
@@ -63,7 +79,7 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
           created_at: true,
           assigned_to: { select: { id: true, name: true, email: true } },
         },
-        orderBy: orderBy as any,
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -71,6 +87,28 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
     ])
 
     res.json({ data: tickets, total, page, pageSize })
+  } catch (err) { next(err) }
+}
+
+export async function createMessage(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params
+    const parsed = createMessageSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message })
+    }
+
+    const ticket = await prisma.ticket.findUnique({ where: { id } })
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+    if (req.user!.role === 'AGENT' && ticket.assigned_to_id !== req.user!.id) {
+      return res.status(403).json({ error: 'You can only reply to tickets assigned to you' })
+    }
+
+    const message = await prisma.message.create({
+      data: { ticket_id: id, body: parsed.data.body, sender_type: 'AGENT' },
+    })
+    res.status(201).json(message)
   } catch (err) { next(err) }
 }
 
@@ -105,7 +143,7 @@ export async function updateTicket(req: Request, res: Response, next: NextFuncti
       data: parsed.data,
       include: {
         messages: { orderBy: { sent_at: 'asc' } },
-        assigned_to: { select: { id: true, name: true } },
+        assigned_to: { select: { id: true, name: true, email: true } },
       },
     })
     res.json(updated)

@@ -128,6 +128,35 @@ Frontend proxies `/api` and `/health` to the backend — no CORS issues in dev.
 
 ---
 
+## Component Testing
+
+**Runner:** Vitest + React Testing Library. Test files live next to the component they test as `<Name>.test.tsx`.
+
+```bash
+cd frontend && npm run test:component   # run once (CI)
+cd frontend && npm run test:watch       # watch mode (dev)
+```
+
+### Writing tests
+
+- Wrap the component under test in `QueryClientProvider` with `retry: false` to prevent TanStack Query from retrying on failure.
+- Mock `axios` with a factory so `axios.get` is a `vi.fn()`. Mock `Navbar` (and any other component that depends on auth context) with a no-op.
+- Use `findBy*` queries (async) when waiting for data to load; use `getBy*` for content that is already in the DOM.
+
+```tsx
+vi.mock('axios', () => ({ default: { get: vi.fn() } }))
+vi.mock('../components/Navbar', () => ({ default: () => <nav /> }))
+
+function renderWithQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+}
+```
+
+> **Note:** Use `happy-dom` (already configured in `vite.config.ts`) — the latest `jsdom` requires Node >= 20.19 but this machine runs 20.15.
+
+---
+
 ## E2E Testing
 
 **Always use the `playwright-e2e-writer` agent to write e2e tests** — invoke it via the Agent tool, never write Playwright tests by hand in the main conversation.

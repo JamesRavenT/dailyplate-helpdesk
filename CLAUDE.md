@@ -154,6 +154,47 @@ Frontend proxies `/api` and `/health` to the backend — no CORS issues in dev.
 
 ---
 
+## Dashboard (Home Page)
+
+**File:** `frontend/src/pages/Home.tsx`
+
+Two role-branched dashboards rendered by the same page:
+
+| Role | Sections |
+|---|---|
+| ADMIN | Activity chart (4 lines) → 5 stat cards → New Tickets slideshow → Online Agents list |
+| AGENT | Activity chart (2 lines) → 4 stat cards → New Tickets slideshow → Recent Tickets slideshow |
+
+**Chart library:** `recharts` — `AreaChart` inside `ResponsiveContainer`. Installed in `frontend/`.
+
+**Chart colors:**
+```ts
+const CHART_COLORS = {
+  received: '#6366f1', resolved: '#10b981', resolvedByAI: '#a855f7', resolvedByAgents: '#0ea5e9'
+}
+```
+
+**Backend endpoints** (all in `backend/src/controllers/tickets.ts`, registered before `/:id` in routes):
+- `GET /api/tickets/stats` — role-branched stats. Admin returns `{ total, ongoing, resolvedByAI, resolvedByAgents, critical, openTickets[], onlineAgents[] }`. Agent returns `{ total, new, ongoing, resolvedClosed, openTickets[] }`.
+- `GET /api/tickets/chart` — 30-day daily series built with `$queryRaw`. Admin: 4 series. Agent: 2 series.
+- `GET /api/tickets/by-ids?ids=...` — fetch up to 10 tickets by comma-separated IDs (used by Recent Tickets).
+
+**Critical Tickets** = `priority: 'HIGH'` (not `severity: 'CRITICAL'` — that field is sparsely populated).
+
+**Raw SQL table name:** Prisma models without `@@map` use their capitalized name as a quoted PG identifier. Always write `FROM "Ticket"`, never `FROM ticket`.
+
+**TicketSlideshow:** Shows 2 cards per page (`PAGE_SIZE = 2`), auto-advances every 4 s, nav controls appear only when `totalPages > 1`.
+
+---
+
+## Error Logging (Sentry)
+
+**Backend:** `backend/src/instrument.ts` must be the **first import** in `index.ts` (it calls `dotenv.config()` and `Sentry.init()`). `Sentry.setupExpressErrorHandler(app)` goes after all routes, before the custom error handler. Env var: `SENTRY_DSN`.
+
+**Frontend:** `frontend/src/instrument.ts` must be the **first import** in `main.tsx`. Needs `/// <reference types="vite/client" />` for `import.meta.env`. App wrapped in `<Sentry.ErrorBoundary>` in `main.tsx`. Env vars: `VITE_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`. Both sides no-op silently when DSN is absent.
+
+---
+
 ## Testing Strategy
 
 Use the right layer for each concern. The rule: **write the test at the lowest layer that can cover it.**
@@ -205,6 +246,11 @@ function renderWithQuery(session = adminSession) {
 ```
 
 > **Note:** Use `happy-dom` (already configured in `vite.config.ts`) — the latest `jsdom` requires Node >= 20.19 but this machine runs 20.15.
+
+> **Note:** Tests that render Recharts components must stub `ResizeObserver` globally — happy-dom doesn't implement it and Recharts will crash without it:
+> ```ts
+> global.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} }
+> ```
 
 ### Layer 2 — E2E tests (Playwright)
 

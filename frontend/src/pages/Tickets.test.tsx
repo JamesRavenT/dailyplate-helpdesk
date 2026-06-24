@@ -227,7 +227,7 @@ describe('Tickets page', () => {
     expect(screen.getByRole('button', { name: 'Assign' })).toBeInTheDocument()
   })
 
-  it('admin sees 👤 button for an assigned ticket', async () => {
+  it('admin sees agent icon button (titled with agent name) for an assigned ticket', async () => {
     mockedGet.mockImplementation((url: string) =>
       url === '/api/users/agents'
         ? Promise.resolve({ data: mockAgents })
@@ -235,7 +235,8 @@ describe('Tickets page', () => {
     )
     renderWithQuery(adminSession)
     await screen.findByRole('link', { name: 'Refund request' })
-    expect(screen.getByRole('button', { name: '👤' })).toBeInTheDocument()
+    // The button title is set to the assigned agent's name
+    expect(screen.getByRole('button', { name: 'Agent One' })).toBeInTheDocument()
   })
 
   // ---------------------------------------------------------------------------

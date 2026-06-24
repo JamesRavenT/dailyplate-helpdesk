@@ -1,15 +1,14 @@
+import './instrument.ts' // must be first — loads .env and initialises Sentry
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
-import dotenv from 'dotenv'
 import rateLimit from 'express-rate-limit'
+import * as Sentry from '@sentry/node'
 import { toNodeHandler } from 'better-auth/node'
 import { auth } from './lib/auth.ts'
 import { router } from './routes/index.ts'
 import { errorHandler } from './middleware/errorHandler.ts'
 import { startBoss } from './lib/boss.ts'
-
-dotenv.config()
 
 const app = express()
 const port = process.env.PORT ?? 3001
@@ -42,6 +41,9 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/api', router)
+
+// Sentry error handler must be after all routes and before any other error middleware
+Sentry.setupExpressErrorHandler(app)
 
 app.use(errorHandler)
 

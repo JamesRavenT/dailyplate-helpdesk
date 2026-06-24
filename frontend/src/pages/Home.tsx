@@ -2,10 +2,19 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
+import {
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  Area,
+  AreaChart,
+} from 'recharts'
 import Navbar from '../components/Navbar'
 import { authClient } from '../lib/auth-client'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
-import { Button } from '../components/ui/button'
 import { Skeleton } from '../components/ui/skeleton'
 import { getRecentViewIds } from '../lib/recentViews'
 import {
@@ -14,10 +23,19 @@ import {
   Brain,
   CheckCircle2,
   AlertTriangle,
-  Users,
   ChevronLeft,
   ChevronRight,
+  Inbox,
 } from 'lucide-react'
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type OnlineAgent = {
+  id: string
+  name: string
+  email: string
+  online_status: 'ONLINE' | 'AWAY' | 'MEETING'
+}
 
 type AdminStats = {
   total: number
@@ -25,6 +43,16 @@ type AdminStats = {
   resolvedByAI: number
   resolvedByAgents: number
   critical: number
+  openTickets: TicketCard[]
+  onlineAgents: OnlineAgent[]
+}
+
+type AgentStats = {
+  total: number
+  ongoing: number
+  resolvedClosed: number
+  new: number
+  openTickets: TicketCard[]
 }
 
 type TicketCard = {
@@ -37,36 +65,164 @@ type TicketCard = {
   last_updated_at: string | null
 }
 
-type AgentStats = {
-  total: number
-  ongoing: number
-  resolved: number
-  openTickets: TicketCard[]
+type AdminChartData = {
+  days: string[]
+  received: number[]
+  resolved: number[]
+  resolvedByAI: number[]
+  resolvedByAgents: number[]
 }
 
+type AgentChartData = {
+  days: string[]
+  received: number[]
+  resolved: number[]
+}
+
+// ─── Chart helpers ────────────────────────────────────────────────────────────
+
+function formatDay(iso: string) {
+  const [, month, day] = iso.split('-')
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${months[parseInt(month, 10) - 1]} ${parseInt(day, 10)}`
+}
+
+const CHART_COLORS = {
+  received:         '#6366f1', // indigo  — neutral inbound
+  resolved:         '#10b981', // emerald — positive outcome
+  resolvedByAI:     '#a855f7', // purple  — AI (matches existing AI badges)
+  resolvedByAgents: '#0ea5e9', // sky     — human agent work
+}
+
+// ─── Ticket slideshow ─────────────────────────────────────────────────────────
+
 const statusColors: Record<string, string> = {
-  OPEN: 'bg-blue-100 text-blue-700',
-  IN_PROGRESS: 'bg-amber-100 text-amber-700',
-  RESOLVED: 'bg-green-100 text-green-700',
-  CLOSED: 'bg-gray-100 text-gray-600',
-  AI_RESOLVED: 'bg-purple-100 text-purple-700',
+  OPEN:          'bg-blue-100 text-blue-700',
+  IN_PROGRESS:   'bg-amber-100 text-amber-700',
+  RESOLVED:      'bg-green-100 text-green-700',
+  CLOSED:        'bg-gray-100 text-gray-600',
+  AI_RESOLVED:   'bg-purple-100 text-purple-700',
   AI_PROCESSING: 'bg-indigo-100 text-indigo-700',
 }
 
 const statusLabels: Record<string, string> = {
-  OPEN: 'Open',
-  IN_PROGRESS: 'In Progress',
-  RESOLVED: 'Resolved',
-  CLOSED: 'Closed',
-  AI_RESOLVED: 'AI Resolved',
+  OPEN:          'Open',
+  IN_PROGRESS:   'In Progress',
+  RESOLVED:      'Resolved',
+  CLOSED:        'Closed',
+  AI_RESOLVED:   'AI Resolved',
   AI_PROCESSING: 'AI Processing',
 }
 
 const priorityColors: Record<string, string> = {
-  LOW: 'text-gray-500',
+  LOW:    'text-gray-500',
   MEDIUM: 'text-amber-600',
-  HIGH: 'text-red-600',
+  HIGH:   'text-red-600',
 }
+
+const PAGE_SIZE = 2
+
+function TicketSlideshow({
+  tickets,
+  isPending,
+  emptyMessage,
+}: {
+  tickets: TicketCard[]
+  isPending: boolean
+  emptyMessage: string
+}) {
+  const navigate = useNavigate()
+  const [page, setPage] = useState(0)
+  const [paused, setPaused] = useState(false)
+
+  const totalPages = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE))
+
+  useEffect(() => { setPage(0) }, [tickets.length])
+
+  useEffect(() => {
+    if (paused || totalPages <= 1) return
+    const id = setInterval(() => {
+      setPage(prev => (prev + 1) % totalPages)
+    }, 4000)
+    return () => clearInterval(id)
+  }, [paused, totalPages])
+
+  if (isPending) return <Skeleton className="h-32 w-full rounded-xl" />
+
+  if (tickets.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+  }
+
+  const safePage = page % totalPages
+  const visible = tickets.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE)
+
+  return (
+    <div
+      className="flex flex-col items-center"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+        {visible.map(ticket => (
+          <div
+            key={ticket.id}
+            className="cursor-pointer"
+            onClick={() => navigate(`/tickets/${ticket.id}`)}
+          >
+            <Card className="h-full transition-shadow hover:shadow-md">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="line-clamp-2 text-sm font-medium leading-snug">
+                    {ticket.subject}
+                  </CardTitle>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[ticket.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                    {statusLabels[ticket.status] ?? ticket.status}
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">{ticket.customer_name}</p>
+                {ticket.priority && (
+                  <p className={`mt-1 text-xs font-medium ${priorityColors[ticket.priority] ?? ''}`}>
+                    {ticket.priority} priority
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ))}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-3">
+          <button
+            onClick={() => setPage(prev => (prev - 1 + totalPages) % totalPages)}
+            className="rounded-full p-1 text-gray-400 hover:text-gray-700"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="flex gap-1.5">
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i)}
+                className={`h-2 w-2 rounded-full transition-colors ${i === safePage ? 'bg-gray-800' : 'bg-gray-300 hover:bg-gray-500'}`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => setPage(prev => (prev + 1) % totalPages)}
+            className="rounded-full p-1 text-gray-400 hover:text-gray-700"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
 
 function StatCard({
   icon: Icon,
@@ -96,106 +252,77 @@ function StatCard({
   )
 }
 
-function TicketSlideshow({
-  tickets,
-  isPending,
-  emptyMessage,
-}: {
-  tickets: TicketCard[]
-  isPending: boolean
-  emptyMessage: string
-}) {
-  const navigate = useNavigate()
-  const [current, setCurrent] = useState(0)
-  const [paused, setPaused] = useState(false)
+// ─── Stat skeleton row ────────────────────────────────────────────────────────
 
-  // Reset index when the ticket list changes
-  useEffect(() => {
-    setCurrent(0)
-  }, [tickets.length])
+function StatSkeletons({ count }: { count: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <Card key={i}>
+          <CardHeader><Skeleton className="h-4 w-24" /></CardHeader>
+          <CardContent><Skeleton className="mt-2 h-8 w-12" /></CardContent>
+        </Card>
+      ))}
+    </>
+  )
+}
 
-  useEffect(() => {
-    if (paused || tickets.length <= 1) return
-    const id = setInterval(() => {
-      setCurrent(prev => (prev + 1) % tickets.length)
-    }, 4000)
-    return () => clearInterval(id)
-  }, [paused, tickets.length])
+// ─── Chart skeleton ───────────────────────────────────────────────────────────
 
-  const idx = tickets.length > 0 ? current % tickets.length : 0
+function ChartSkeleton() {
+  return (
+    <Card>
+      <CardHeader><Skeleton className="h-4 w-40" /></CardHeader>
+      <CardContent>
+        <Skeleton className="h-52 w-full rounded-lg" />
+      </CardContent>
+    </Card>
+  )
+}
 
+// ─── Online agents list ───────────────────────────────────────────────────────
+
+const agentStatusDot: Record<string, string> = {
+  ONLINE:  'bg-green-500',
+  AWAY:    'bg-yellow-400',
+  MEETING: 'bg-blue-500',
+}
+
+const agentStatusLabel: Record<string, string> = {
+  ONLINE:  'Online',
+  AWAY:    'Away',
+  MEETING: 'In Meeting',
+}
+
+function OnlineAgentsList({ agents, isPending }: { agents: OnlineAgent[]; isPending: boolean }) {
   if (isPending) return <Skeleton className="h-32 w-full rounded-xl" />
 
-  if (tickets.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+  if (agents.length === 0) {
+    return <p className="text-sm text-muted-foreground">No agents are currently online.</p>
   }
 
   return (
-    <div
-      className="relative max-w-lg"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      <div
-        className="cursor-pointer"
-        onClick={() => navigate(`/tickets/${tickets[idx].id}`)}
-      >
-        <Card className="transition-shadow hover:shadow-md">
-          <CardHeader>
-            <div className="flex items-start justify-between gap-2">
-              <CardTitle className="line-clamp-2 text-sm font-medium leading-snug">
-                {tickets[idx].subject}
-              </CardTitle>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[tickets[idx].status] ?? 'bg-gray-100 text-gray-600'}`}
-              >
-                {statusLabels[tickets[idx].status] ?? tickets[idx].status}
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground">{tickets[idx].customer_name}</p>
-            {tickets[idx].priority && (
-              <p className={`mt-1 text-xs font-medium ${priorityColors[tickets[idx].priority!] ?? ''}`}>
-                {tickets[idx].priority} priority
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {tickets.length > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-3">
-          <button
-            onClick={() => setCurrent(prev => (prev - 1 + tickets.length) % tickets.length)}
-            className="rounded-full p-1 text-gray-400 hover:text-gray-700"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="flex gap-1.5">
-            {tickets.map((_, i) => (
-              <button
-                key={i}
-                onClick={() => setCurrent(i)}
-                className={`h-2 w-2 rounded-full transition-colors ${i === idx ? 'bg-gray-800' : 'bg-gray-300 hover:bg-gray-500'}`}
-              />
-            ))}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {agents.map(agent => (
+        <div
+          key={agent.id}
+          className="flex items-center gap-3 rounded-xl border bg-white px-4 py-3"
+        >
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${agentStatusDot[agent.online_status] ?? 'bg-gray-400'}`} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-gray-900">{agent.name}</p>
+            <p className="truncate text-xs text-muted-foreground">{agentStatusLabel[agent.online_status]}</p>
           </div>
-          <button
-            onClick={() => setCurrent(prev => (prev + 1) % tickets.length)}
-            className="rounded-full p-1 text-gray-400 hover:text-gray-700"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
         </div>
-      )}
+      ))}
     </div>
   )
 }
 
+// ─── Admin dashboard ──────────────────────────────────────────────────────────
+
 function AdminDashboard() {
-  const navigate = useNavigate()
-  const { data, isPending } = useQuery<AdminStats>({
+  const { data: stats, isPending: statsPending } = useQuery<AdminStats>({
     queryKey: ['ticketStats'],
     queryFn: async () => {
       const { data } = await axios.get('/api/tickets/stats')
@@ -203,40 +330,98 @@ function AdminDashboard() {
     },
   })
 
-  const stats = [
-    { icon: Ticket,       label: 'Total Tickets',       value: data?.total ?? 0,            iconClass: 'bg-blue-100 text-blue-600'   },
-    { icon: Clock,        label: 'Ongoing Tickets',      value: data?.ongoing ?? 0,          iconClass: 'bg-amber-100 text-amber-600' },
-    { icon: Brain,        label: 'Resolved by AI',       value: data?.resolvedByAI ?? 0,     iconClass: 'bg-purple-100 text-purple-600' },
-    { icon: CheckCircle2, label: 'Resolved by Agents',   value: data?.resolvedByAgents ?? 0, iconClass: 'bg-green-100 text-green-600' },
-    { icon: AlertTriangle,label: 'Critical Tickets',     value: data?.critical ?? 0,         iconClass: 'bg-red-100 text-red-600'     },
+  const { data: chart, isPending: chartPending } = useQuery<AdminChartData>({
+    queryKey: ['ticketChart', 'admin'],
+    queryFn: async () => {
+      const { data } = await axios.get('/api/tickets/chart')
+      return data
+    },
+  })
+
+  const chartPoints = chart
+    ? chart.days.map((day, i) => ({
+        day: formatDay(day),
+        Received:             chart.received[i],
+        Resolved:             chart.resolved[i],
+        'Resolved by AI':     chart.resolvedByAI[i],
+        'Resolved by Agents': chart.resolvedByAgents[i],
+      }))
+    : []
+
+  const statCards = [
+    { icon: Ticket,        label: 'Total Tickets',      value: stats?.total            ?? 0, iconClass: 'bg-blue-100 text-blue-600'    },
+    { icon: Clock,         label: 'Ongoing Tickets',    value: stats?.ongoing          ?? 0, iconClass: 'bg-amber-100 text-amber-600'  },
+    { icon: Brain,         label: 'Resolved by AI',     value: stats?.resolvedByAI     ?? 0, iconClass: 'bg-purple-100 text-purple-600' },
+    { icon: CheckCircle2,  label: 'Resolved by Agents', value: stats?.resolvedByAgents ?? 0, iconClass: 'bg-green-100 text-green-600'  },
+    { icon: AlertTriangle, label: 'Critical Tickets',   value: stats?.critical         ?? 0, iconClass: 'bg-red-100 text-red-600'      },
   ]
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Activity chart */}
+      {chartPending ? (
+        <ChartSkeleton />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Ticket Activity — Last 30 Days</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={chartPoints} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <defs>
+                  {Object.entries(CHART_COLORS).map(([key, color]) => (
+                    <linearGradient key={key} id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={color} stopOpacity={0.08} />
+                      <stop offset="95%" stopColor={color} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} interval={4} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} cursor={{ stroke: '#e2e8f0' }} />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+                <Area dataKey="Received"             type="monotone" stroke={CHART_COLORS.received}         strokeWidth={2} fill="url(#fill-received)"         dot={false} activeDot={{ r: 4 }} />
+                <Area dataKey="Resolved"             type="monotone" stroke={CHART_COLORS.resolved}         strokeWidth={2} fill="url(#fill-resolved)"         dot={false} activeDot={{ r: 4 }} />
+                <Area dataKey="Resolved by AI"       type="monotone" stroke={CHART_COLORS.resolvedByAI}    strokeWidth={2} fill="url(#fill-resolvedByAI)"    dot={false} activeDot={{ r: 4 }} />
+                <Area dataKey="Resolved by Agents"   type="monotone" stroke={CHART_COLORS.resolvedByAgents} strokeWidth={2} fill="url(#fill-resolvedByAgents)" dot={false} activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {isPending
-          ? Array.from({ length: 5 }).map((_, i) => (
-              <Card key={i}>
-                <CardHeader><Skeleton className="h-4 w-24" /></CardHeader>
-                <CardContent><Skeleton className="mt-2 h-8 w-12" /></CardContent>
-              </Card>
-            ))
-          : stats.map(s => <StatCard key={s.label} {...s} />)}
+        {statsPending
+          ? <StatSkeletons count={5} />
+          : statCards.map(s => <StatCard key={s.label} {...s} />)}
       </div>
 
-      <div className="flex gap-3">
-        <Button onClick={() => navigate('/tickets')}>
-          <Ticket className="h-4 w-4" />
-          View Tickets
-        </Button>
-        <Button variant="outline" onClick={() => navigate('/users')}>
-          <Users className="h-4 w-4" />
-          Manage Users
-        </Button>
+      {/* New Tickets */}
+      <div>
+        <h2 className="mb-3 text-base font-semibold text-gray-900">New Tickets</h2>
+        <TicketSlideshow
+          tickets={stats?.openTickets ?? []}
+          isPending={statsPending}
+          emptyMessage="No open tickets at the moment."
+        />
+      </div>
+
+      {/* Online Agents */}
+      <div>
+        <h2 className="mb-3 text-base font-semibold text-gray-900">Online Agents</h2>
+        <OnlineAgentsList
+          agents={stats?.onlineAgents ?? []}
+          isPending={statsPending}
+        />
       </div>
     </div>
   )
 }
+
+// ─── Agent dashboard ──────────────────────────────────────────────────────────
 
 function AgentDashboard({ userId }: { userId: string }) {
   const viewedIds = getRecentViewIds(userId)
@@ -245,6 +430,14 @@ function AgentDashboard({ userId }: { userId: string }) {
     queryKey: ['ticketStats'],
     queryFn: async () => {
       const { data } = await axios.get('/api/tickets/stats')
+      return data
+    },
+  })
+
+  const { data: chart, isPending: chartPending } = useQuery<AgentChartData>({
+    queryKey: ['ticketChart', 'agent'],
+    queryFn: async () => {
+      const { data } = await axios.get('/api/tickets/chart')
       return data
     },
   })
@@ -259,23 +452,76 @@ function AgentDashboard({ userId }: { userId: string }) {
     enabled: viewedIds.length > 0,
   })
 
-  const stats = [
-    { icon: Ticket,       label: 'Total Tickets',   value: statsData?.total ?? 0,    iconClass: 'bg-blue-100 text-blue-600'   },
-    { icon: Clock,        label: 'Ongoing Tickets',  value: statsData?.ongoing ?? 0,  iconClass: 'bg-amber-100 text-amber-600' },
-    { icon: CheckCircle2, label: 'Resolved Tickets', value: statsData?.resolved ?? 0, iconClass: 'bg-green-100 text-green-600' },
+  const chartPoints = chart
+    ? chart.days.map((day, i) => ({
+        day: formatDay(day),
+        Received: chart.received[i],
+        'Resolved / Closed': chart.resolved[i],
+      }))
+    : []
+
+  const statCards = [
+    { icon: Ticket,       label: 'Total Tickets',          value: statsData?.total          ?? 0, iconClass: 'bg-blue-100 text-blue-600'   },
+    { icon: Inbox,        label: 'New Tickets',             value: statsData?.new            ?? 0, iconClass: 'bg-indigo-100 text-indigo-600' },
+    { icon: Clock,        label: 'Ongoing Tickets',         value: statsData?.ongoing        ?? 0, iconClass: 'bg-amber-100 text-amber-600' },
+    { icon: CheckCircle2, label: 'Resolved / Closed',       value: statsData?.resolvedClosed ?? 0, iconClass: 'bg-green-100 text-green-600' },
   ]
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <div className="space-y-6">
+      {/* Line chart */}
+      {chartPending ? (
+        <ChartSkeleton />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Your Ticket Activity — Last 30 Days</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={chartPoints} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="fill-rcv" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.received} stopOpacity={0.08} />
+                    <stop offset="95%" stopColor={CHART_COLORS.received} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="fill-res" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.resolved} stopOpacity={0.08} />
+                    <stop offset="95%" stopColor={CHART_COLORS.resolved} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={4}
+                />
+                <YAxis
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
+                  cursor={{ stroke: '#e2e8f0' }}
+                />
+                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
+                <Area dataKey="Received"           type="monotone" stroke={CHART_COLORS.received} strokeWidth={2} fill="url(#fill-rcv)" dot={false} activeDot={{ r: 4 }} />
+                <Area dataKey="Resolved / Closed"  type="monotone" stroke={CHART_COLORS.resolved} strokeWidth={2} fill="url(#fill-res)" dot={false} activeDot={{ r: 4 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {statsPending
-          ? Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i}>
-                <CardHeader><Skeleton className="h-4 w-24" /></CardHeader>
-                <CardContent><Skeleton className="mt-2 h-8 w-12" /></CardContent>
-              </Card>
-            ))
-          : stats.map(s => <StatCard key={s.label} {...s} />)}
+          ? <StatSkeletons count={4} />
+          : statCards.map(s => <StatCard key={s.label} {...s} />)}
       </div>
 
       <div>
@@ -298,6 +544,8 @@ function AgentDashboard({ userId }: { userId: string }) {
     </div>
   )
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const { data: session, isPending: sessionPending } = authClient.useSession()

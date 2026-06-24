@@ -29,6 +29,13 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: vi.fn() }
 })
 
+// Recharts uses ResizeObserver in the browser; stub it for happy-dom
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 // ─── sessions ────────────────────────────────────────────────────────────────
 
 const adminSession = {
@@ -49,12 +56,47 @@ const agentSession = {
 
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
-const adminStats = { total: 42, ongoing: 8, resolvedByAI: 15, resolvedByAgents: 19, critical: 3 }
+const adminOpenTickets = [
+  {
+    id: 'admin-ticket-1',
+    subject: 'Server is down',
+    customer_name: 'Dave Admin',
+    status: 'OPEN',
+    priority: 'HIGH',
+    created_at: '2026-06-10T00:00:00Z',
+    last_updated_at: null,
+  },
+  {
+    id: 'admin-ticket-2',
+    subject: 'Cannot access billing',
+    customer_name: 'Eve Admin',
+    status: 'OPEN',
+    priority: 'MEDIUM',
+    created_at: '2026-06-11T00:00:00Z',
+    last_updated_at: null,
+  },
+]
+
+const onlineAgents = [
+  { id: 'ag-1', name: 'Frank Agent', email: 'frank@test.com', online_status: 'ONLINE' },
+  { id: 'ag-2', name: 'Grace Agent', email: 'grace@test.com', online_status: 'AWAY' },
+]
+
+const adminStats = {
+  total: 42,
+  ongoing: 8,
+  resolvedByAI: 15,
+  resolvedByAgents: 19,
+  critical: 3,
+  openTickets: adminOpenTickets,
+  onlineAgents,
+}
 
 const agentStats = {
   total: 10,
+  new: 2,
   ongoing: 3,
-  resolved: 7,
+  resolvedClosed: 7,
   openTickets: [
     {
       id: 'ticket-1',
@@ -75,6 +117,18 @@ const agentStats = {
       last_updated_at: null,
     },
   ],
+}
+
+const emptyChart = {
+  days: Array.from({ length: 30 }, (_, i) => {
+    const d = new Date('2026-05-26')
+    d.setDate(d.getDate() + i)
+    return d.toISOString().slice(0, 10)
+  }),
+  received: Array(30).fill(0),
+  resolved: Array(30).fill(0),
+  resolvedByAI: Array(30).fill(0),
+  resolvedByAgents: Array(30).fill(0),
 }
 
 const recentTickets = [
@@ -106,6 +160,21 @@ function renderHome(session = adminSession) {
   return { mockNavigate }
 }
 
+function mockAdminAxios() {
+  vi.mocked(axios.get).mockImplementation(async (url: string) => {
+    if (url === '/api/tickets/chart') return { data: emptyChart }
+    return { data: adminStats }
+  })
+}
+
+function mockAgentAxios(overrides = {}) {
+  const stats = { ...agentStats, ...overrides }
+  vi.mocked(axios.get).mockImplementation(async (url: string) => {
+    if (url === '/api/tickets/chart') return { data: { ...emptyChart, resolvedByAI: undefined, resolvedByAgents: undefined } }
+    return { data: stats }
+  })
+}
+
 // ─── Admin Dashboard ─────────────────────────────────────────────────────────
 
 describe('Home — Admin Dashboard', () => {
@@ -115,14 +184,14 @@ describe('Home — Admin Dashboard', () => {
   })
 
   it('shows welcome heading with admin name and email', () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: adminStats })
+    mockAdminAxios()
     renderHome(adminSession)
     expect(screen.getByText('Welcome back, Admin User')).toBeInTheDocument()
     expect(screen.getByText('admin@test.com')).toBeInTheDocument()
   })
 
   it('renders all five stat card labels after data loads', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: adminStats })
+    mockAdminAxios()
     renderHome(adminSession)
     await waitFor(() => expect(screen.getByText('Total Tickets')).toBeInTheDocument())
     expect(screen.getByText('Ongoing Tickets')).toBeInTheDocument()
@@ -132,7 +201,7 @@ describe('Home — Admin Dashboard', () => {
   })
 
   it('displays the fetched stat values', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: adminStats })
+    mockAdminAxios()
     renderHome(adminSession)
     await waitFor(() => expect(screen.getByText('42')).toBeInTheDocument())
     expect(screen.getByText('8')).toBeInTheDocument()
@@ -141,25 +210,54 @@ describe('Home — Admin Dashboard', () => {
     expect(screen.getByText('3')).toBeInTheDocument()
   })
 
-  it('renders View Tickets and Manage Users buttons', () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: adminStats })
+  it('does not render View Tickets or Manage Users buttons', () => {
+    mockAdminAxios()
     renderHome(adminSession)
-    expect(screen.getByRole('button', { name: /view tickets/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /manage users/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /view tickets/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /manage users/i })).not.toBeInTheDocument()
   })
 
-  it('View Tickets button navigates to /tickets', () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: adminStats })
-    const { mockNavigate } = renderHome(adminSession)
-    fireEvent.click(screen.getByRole('button', { name: /view tickets/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/tickets')
+  it('renders New Tickets section heading', () => {
+    mockAdminAxios()
+    renderHome(adminSession)
+    expect(screen.getByRole('heading', { name: 'New Tickets', level: 2 })).toBeInTheDocument()
   })
 
-  it('Manage Users button navigates to /users', () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: adminStats })
-    const { mockNavigate } = renderHome(adminSession)
-    fireEvent.click(screen.getByRole('button', { name: /manage users/i }))
-    expect(mockNavigate).toHaveBeenCalledWith('/users')
+  it('shows open tickets in the New Tickets slideshow', async () => {
+    mockAdminAxios()
+    renderHome(adminSession)
+    await waitFor(() =>
+      expect(screen.getByText('Server is down')).toBeInTheDocument()
+    )
+    expect(screen.getByText('Dave Admin')).toBeInTheDocument()
+  })
+
+  it('renders Online Agents section heading', () => {
+    mockAdminAxios()
+    renderHome(adminSession)
+    expect(screen.getByRole('heading', { name: 'Online Agents', level: 2 })).toBeInTheDocument()
+  })
+
+  it('shows online agents with correct status labels', async () => {
+    mockAdminAxios()
+    renderHome(adminSession)
+    await waitFor(() =>
+      expect(screen.getByText('Frank Agent')).toBeInTheDocument()
+    )
+    expect(screen.getByText('Grace Agent')).toBeInTheDocument()
+    expect(screen.getByText('Online')).toBeInTheDocument()
+    expect(screen.getByText('Away')).toBeInTheDocument()
+  })
+
+  it('shows empty state when no agents are online', async () => {
+    vi.mocked(axios.get).mockImplementation(async (url: string) => {
+      if (url === '/api/tickets/chart') return { data: emptyChart }
+      return { data: { ...adminStats, onlineAgents: [] } }
+    })
+    renderHome(adminSession)
+    await waitFor(() =>
+      expect(screen.getByText('No agents are currently online.')).toBeInTheDocument()
+    )
   })
 
   it('shows skeleton placeholders while stats are loading', () => {
@@ -179,37 +277,40 @@ describe('Home — Agent Dashboard', () => {
   })
 
   it('shows welcome heading with agent name and email', () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     renderHome(agentSession)
     expect(screen.getByText('Welcome back, Agent User')).toBeInTheDocument()
     expect(screen.getByText('agent@test.com')).toBeInTheDocument()
   })
 
-  it('renders three stat card labels after data loads', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+  it('renders four stat card labels after data loads', async () => {
+    mockAgentAxios()
     renderHome(agentSession)
     await waitFor(() => expect(screen.getByText('Total Tickets')).toBeInTheDocument())
     expect(screen.getByText('Ongoing Tickets')).toBeInTheDocument()
-    expect(screen.getByText('Resolved Tickets')).toBeInTheDocument()
+    expect(screen.getByText('Resolved / Closed')).toBeInTheDocument()
+    // "New Tickets" appears as both a stat card and a section heading
+    expect(screen.getAllByText('New Tickets').length).toBeGreaterThanOrEqual(1)
   })
 
   it('displays the fetched stat values', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     renderHome(agentSession)
     await waitFor(() => expect(screen.getByText('10')).toBeInTheDocument())
     expect(screen.getByText('3')).toBeInTheDocument()
     expect(screen.getByText('7')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
   })
 
   it('renders New Tickets and Recent Tickets section headings', () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     renderHome(agentSession)
-    expect(screen.getByText('New Tickets')).toBeInTheDocument()
+    expect(screen.getAllByText('New Tickets').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Recent Tickets')).toBeInTheDocument()
   })
 
   it('shows the first open ticket in the New Tickets slideshow', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     renderHome(agentSession)
     await waitFor(() =>
       expect(screen.getByText('Cannot login to portal')).toBeInTheDocument()
@@ -218,36 +319,49 @@ describe('Home — Agent Dashboard', () => {
   })
 
   it('shows the correct status badge on the ticket card', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     renderHome(agentSession)
     await waitFor(() =>
-      expect(screen.getByText('Open', { selector: 'span' })).toBeInTheDocument()
+      expect(screen.getAllByText('Open', { selector: 'span' }).length).toBeGreaterThanOrEqual(1)
     )
   })
 
   it('shows the priority label on the ticket card', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     renderHome(agentSession)
     await waitFor(() =>
       expect(screen.getByText('HIGH priority')).toBeInTheDocument()
     )
   })
 
-  it('shows navigation controls when there are multiple open tickets', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+  it('shows both open tickets side-by-side when there are exactly 2', async () => {
+    mockAgentAxios()
     renderHome(agentSession)
     await waitFor(() =>
       expect(screen.getByText('Cannot login to portal')).toBeInTheDocument()
     )
-    // 2 open tickets → slideshow renders prev + dot×2 + next = 4 buttons
-    const heading = screen.getByText('New Tickets')
+    expect(screen.getByText('Invoice missing from account')).toBeInTheDocument()
+  })
+
+  it('shows navigation controls when tickets span more than one page', async () => {
+    const threeTickets = [
+      ...agentStats.openTickets,
+      { id: 'ticket-extra', subject: 'Third ticket subject', customer_name: 'Extra User', status: 'OPEN', priority: 'LOW', created_at: '2026-06-04T00:00:00Z', last_updated_at: null },
+    ]
+    mockAgentAxios({ openTickets: threeTickets })
+    renderHome(agentSession)
+    await waitFor(() =>
+      expect(screen.getByText('Cannot login to portal')).toBeInTheDocument()
+    )
+    // 3 tickets → 2 pages → prev + 2 dots + next = 4 nav buttons
+    const heading = screen.getByRole('heading', { name: 'New Tickets', level: 2 })
     const section = heading.parentElement!
     const buttons = section.querySelectorAll('button')
     expect(buttons.length).toBeGreaterThanOrEqual(4)
   })
 
   it('shows empty state when no open tickets are assigned', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: { ...agentStats, openTickets: [] } })
+    mockAgentAxios({ openTickets: [] })
     renderHome(agentSession)
     await waitFor(() =>
       expect(screen.getByText('No open tickets assigned to you.')).toBeInTheDocument()
@@ -255,7 +369,7 @@ describe('Home — Agent Dashboard', () => {
   })
 
   it('shows empty state for Recent Tickets when agent has not viewed anything', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     vi.mocked(getRecentViewIds).mockReturnValue([])
     renderHome(agentSession)
     await waitFor(() =>
@@ -268,7 +382,7 @@ describe('Home — Agent Dashboard', () => {
     vi.mocked(axios.get).mockImplementation(async (url: string) => {
       if (url === '/api/tickets/stats') return { data: agentStats }
       if (url.includes('by-ids')) return { data: recentTickets }
-      return { data: {} }
+      return { data: emptyChart }
     })
     renderHome(agentSession)
     await waitFor(() =>
@@ -278,7 +392,7 @@ describe('Home — Agent Dashboard', () => {
   })
 
   it('clicking a New Tickets card navigates to that ticket', async () => {
-    vi.mocked(axios.get).mockResolvedValue({ data: agentStats })
+    mockAgentAxios()
     const { mockNavigate } = renderHome(agentSession)
     await waitFor(() =>
       expect(screen.getByText('Cannot login to portal')).toBeInTheDocument()
@@ -292,7 +406,7 @@ describe('Home — Agent Dashboard', () => {
     vi.mocked(axios.get).mockImplementation(async (url: string) => {
       if (url === '/api/tickets/stats') return { data: agentStats }
       if (url.includes('by-ids')) return { data: recentTickets }
-      return { data: {} }
+      return { data: emptyChart }
     })
     const { mockNavigate } = renderHome(agentSession)
     await waitFor(() =>
@@ -306,8 +420,6 @@ describe('Home — Agent Dashboard', () => {
     vi.mocked(axios.get).mockReturnValue(new Promise(() => {}))
     renderHome(agentSession)
     expect(screen.queryByText('Total Tickets')).not.toBeInTheDocument()
-    // Section headings are always rendered regardless of loading state
-    expect(screen.getByText('New Tickets')).toBeInTheDocument()
     expect(screen.getByText('Recent Tickets')).toBeInTheDocument()
   })
 })

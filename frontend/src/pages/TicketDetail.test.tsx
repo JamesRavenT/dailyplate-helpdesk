@@ -500,4 +500,122 @@ describe('TicketDetail page', () => {
     fireEvent.click(screen.getByRole('button', { name: /back to tickets/i }))
     expect(mockNavigate).toHaveBeenCalledWith('/tickets')
   })
+
+  // ---------------------------------------------------------------------------
+  // Send Reply — email sending
+  // ---------------------------------------------------------------------------
+
+  it('clicking Send Reply calls POST /api/tickets/:id/messages with the body', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: {} })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'Here is my reply to the customer.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith('/api/tickets/ticket-123/messages', {
+        body: 'Here is my reply to the customer.',
+      })
+    )
+  })
+
+  it('textarea is cleared after a successful send', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: {} })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'Reply text.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Write your reply…')).toHaveValue('')
+    )
+  })
+
+  it('Send Reply shows "Sending…" and is disabled while the mutation is in flight', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    // Never resolves — keeps mutation in pending state
+    mockedPost.mockReturnValue(new Promise(() => {}))
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'Draft reply.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /sending…/i })).toBeDisabled()
+    )
+  })
+
+  it('Polish button is disabled while Send Reply mutation is in flight', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockReturnValue(new Promise(() => {}))
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'Draft reply.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /sending…/i })).toBeDisabled()
+    )
+    expect(screen.getByRole('button', { name: /^polish$/i })).toBeDisabled()
+  })
+
+  it('shows error message when Send Reply fails', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockRejectedValue({ response: { data: { error: 'Failed to deliver email' } } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'My reply.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+
+    expect(await screen.findByText('Failed to deliver email')).toBeInTheDocument()
+  })
+
+  it('textarea retains content when Send Reply fails', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockRejectedValue({ response: { data: { error: 'Failed to deliver email' } } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'My reply.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send Reply' }))
+
+    await screen.findByText('Failed to deliver email')
+    expect(screen.getByPlaceholderText('Write your reply…')).toHaveValue('My reply.')
+  })
+
+  it('Ctrl+Enter sends the reply', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: {} })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    const textarea = screen.getByPlaceholderText('Write your reply…')
+    fireEvent.change(textarea, { target: { value: 'Keyboard shortcut reply.' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
+
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith('/api/tickets/ticket-123/messages', {
+        body: 'Keyboard shortcut reply.',
+      })
+    )
+  })
 })

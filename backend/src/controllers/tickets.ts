@@ -226,7 +226,7 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
     const user = req.user!
 
     if (user.role === 'ADMIN') {
-      const [total, ongoing, resolvedByAI, resolvedByAgents, critical] = await Promise.all([
+      const [total, ongoing, resolvedByAI, resolvedByAgents, critical, openTickets, onlineAgents] = await Promise.all([
         prisma.ticket.count({ where: { status: { not: 'AI_PROCESSING' } } }),
         prisma.ticket.count({ where: { status: 'IN_PROGRESS' } }),
         prisma.ticket.count({
@@ -240,20 +240,44 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
         prisma.ticket.count({ where: { status: 'RESOLVED', is_ai_handled: false } }),
         prisma.ticket.count({
           where: {
-            severity: 'CRITICAL',
+            priority: 'HIGH',
             status: { notIn: ['RESOLVED', 'CLOSED', 'AI_RESOLVED'] },
           },
         }),
+        prisma.ticket.findMany({
+          where: { status: 'OPEN' },
+          orderBy: [{ created_at: 'desc' }],
+          take: 10,
+          select: {
+            id: true,
+            subject: true,
+            customer_name: true,
+            status: true,
+            priority: true,
+            created_at: true,
+            last_updated_at: true,
+          },
+        }),
+        prisma.user.findMany({
+          where: {
+            role: 'AGENT',
+            is_active: true,
+            online_status: { in: ['ONLINE', 'AWAY', 'MEETING'] },
+          },
+          select: { id: true, name: true, email: true, online_status: true },
+          orderBy: { name: 'asc' },
+        }),
       ])
-      return res.json({ total, ongoing, resolvedByAI, resolvedByAgents, critical })
+      return res.json({ total, ongoing, resolvedByAI, resolvedByAgents, critical, openTickets, onlineAgents })
     }
 
     // Agent
     const agentId = user.id
-    const [total, ongoing, resolved, openTickets] = await Promise.all([
+    const [total, ongoing, resolvedClosed, newCount, openTickets] = await Promise.all([
       prisma.ticket.count({ where: { assigned_to_id: agentId } }),
       prisma.ticket.count({ where: { assigned_to_id: agentId, status: 'IN_PROGRESS' } }),
-      prisma.ticket.count({ where: { assigned_to_id: agentId, status: 'RESOLVED' } }),
+      prisma.ticket.count({ where: { assigned_to_id: agentId, status: { in: ['RESOLVED', 'CLOSED'] } } }),
+      prisma.ticket.count({ where: { assigned_to_id: agentId, status: 'OPEN' } }),
       prisma.ticket.findMany({
         where: { assigned_to_id: agentId, status: 'OPEN' },
         orderBy: [
@@ -272,7 +296,98 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
         },
       }),
     ])
-    return res.json({ total, ongoing, resolved, openTickets })
+    return res.json({ total, ongoing, resolvedClosed, new: newCount, openTickets })
+  } catch (err) { next(err) }
+}
+
+type DayRow = { date: string; count: bigint }
+
+function buildSeries(rows: DayRow[], days: string[]): number[] {
+  const map = new Map(rows.map(r => [r.date, Number(r.count)]))
+  return days.map(d => map.get(d) ?? 0)
+}
+
+export async function getChartData(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user!
+
+    // Last 30 days inclusive (today back to 29 days ago)
+    const now = new Date()
+    const days: string[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(d.getDate() - i)
+      days.push(d.toISOString().slice(0, 10))
+    }
+    const since = new Date(days[0] + 'T00:00:00.000Z')
+
+    if (user.role === 'ADMIN') {
+      const [receivedRows, resolvedRows, byAIRows, byAgentsRows] = await Promise.all([
+        prisma.$queryRaw<DayRow[]>`
+          SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+                 COUNT(*)::bigint AS count
+          FROM "Ticket"
+          WHERE created_at >= ${since}
+            AND status != 'AI_PROCESSING'
+          GROUP BY 1 ORDER BY 1`,
+        prisma.$queryRaw<DayRow[]>`
+          SELECT TO_CHAR(last_updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+                 COUNT(*)::bigint AS count
+          FROM "Ticket"
+          WHERE status IN ('RESOLVED','CLOSED','AI_RESOLVED')
+            AND last_updated_at >= ${since}
+          GROUP BY 1 ORDER BY 1`,
+        prisma.$queryRaw<DayRow[]>`
+          SELECT TO_CHAR(last_updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+                 COUNT(*)::bigint AS count
+          FROM "Ticket"
+          WHERE (status = 'AI_RESOLVED' OR (status = 'RESOLVED' AND is_ai_handled = true))
+            AND last_updated_at >= ${since}
+          GROUP BY 1 ORDER BY 1`,
+        prisma.$queryRaw<DayRow[]>`
+          SELECT TO_CHAR(last_updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+                 COUNT(*)::bigint AS count
+          FROM "Ticket"
+          WHERE status IN ('RESOLVED','CLOSED')
+            AND is_ai_handled = false
+            AND last_updated_at >= ${since}
+          GROUP BY 1 ORDER BY 1`,
+      ])
+
+      return res.json({
+        days,
+        received:          buildSeries(receivedRows,   days),
+        resolved:          buildSeries(resolvedRows,   days),
+        resolvedByAI:      buildSeries(byAIRows,       days),
+        resolvedByAgents:  buildSeries(byAgentsRows,   days),
+      })
+    }
+
+    // Agent — scoped to their assigned tickets
+    const agentId = user.id
+    const [receivedRows, resolvedRows] = await Promise.all([
+      prisma.$queryRaw<DayRow[]>`
+        SELECT TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+               COUNT(*)::bigint AS count
+        FROM "Ticket"
+        WHERE assigned_to_id = ${agentId}
+          AND created_at >= ${since}
+        GROUP BY 1 ORDER BY 1`,
+      prisma.$queryRaw<DayRow[]>`
+        SELECT TO_CHAR(last_updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS date,
+               COUNT(*)::bigint AS count
+        FROM "Ticket"
+        WHERE assigned_to_id = ${agentId}
+          AND status IN ('RESOLVED','CLOSED')
+          AND last_updated_at >= ${since}
+        GROUP BY 1 ORDER BY 1`,
+    ])
+
+    return res.json({
+      days,
+      received: buildSeries(receivedRows, days),
+      resolved: buildSeries(resolvedRows, days),
+    })
   } catch (err) { next(err) }
 }
 

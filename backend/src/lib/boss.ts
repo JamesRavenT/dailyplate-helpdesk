@@ -34,6 +34,7 @@ export type ProcessJobData = {
 }
 
 const processSchema = z.object({
+  customerName: z.string(),
   category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   canResolve: z.boolean(),
@@ -84,8 +85,7 @@ async function findNextAgent(): Promise<string | null> {
 
 async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
   for (const job of jobs) {
-    const { ticketId, customerName, subject, body } = job.data
-    const firstName = customerName.split(' ')[0]
+    const { ticketId, subject, body } = job.data
     const now = new Date()
 
     const ticketContact = await prisma.ticket.findUnique({
@@ -93,13 +93,25 @@ async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
       select: { customer_email: true, customer_name: true, email_thread_id: true },
     })
 
+    const customerEmail = ticketContact?.customer_email ?? ''
+    const rawName = ticketContact?.customer_name ?? ''
+
     const { object } = await generateObject({
       model: openai('gpt-4.1-nano'),
       schema: processSchema,
       system: `You are an AI support agent for BizTest. For each incoming ticket you must:
 
-1. Classify it (category + priority).
-2. Decide if you can fully resolve it with one accurate, factual reply.
+1. Extract the customer's real name.
+2. Classify it (category + priority).
+3. Decide if you can fully resolve it with one accurate, factual reply.
+
+CUSTOMER NAME EXTRACTION — set customerName:
+- First, scan the message body for a self-introduction (e.g. "Hi, I'm Jane", "My name is John", "This is Sarah", a sign-off like "Regards, Maria").
+- If no name is found in the body, derive a proper name from the email address:
+  - Split on dots, underscores, hyphens, and digits
+  - Capitalise each part, drop pure-number segments
+  - Example: "john.doe@gmail.com" → "John Doe", "sarah_smith92@yahoo.com" → "Sarah Smith"
+- Always return a clean proper name — never return the raw email address.
 
 IMPORTANT: You have NO access to customer accounts, billing systems, or internal data. You cannot process refunds, reset passwords, investigate charges, or take any action on behalf of the customer. Never pretend you have done something you cannot do.
 
@@ -117,7 +129,7 @@ Set canResolve=false for ANYTHING that requires looking up or acting on a specif
 - Any request that implies taking an action ("please cancel my account", "please refund me")
 
 When canResolve=true, write a complete reply in the reply field:
-- Open with "Dear ${firstName},"
+- Open with "Dear [customer first name],"
 - Warm, empathetic, professional tone
 - Answer clearly and completely using only factual, general information
 - Close with "\\n\\nBest regards,\\nBizTest Support Team"
@@ -136,21 +148,27 @@ Priority:
 - HIGH: account locked, payment failure, data loss, service down
 - MEDIUM: billing confusion, degraded feature, inconvenient issue
 - LOW: general questions, minor issues, feature requests`,
-      prompt: `Customer name: ${customerName}
+      prompt: `Customer email: ${customerEmail}
+Current name on file: ${rawName}
 Subject: ${subject}
 
 Message:
 ${body}`,
     })
 
+    const resolvedName = object.customerName.trim() || rawName
+    const firstName = resolvedName.split(' ')[0]
+
     if (object.canResolve && object.reply) {
+      const reply = object.reply.replace(/Dear\s+\S+,/, `Dear ${firstName},`)
       await prisma.$transaction([
         prisma.message.create({
-          data: { ticket_id: ticketId, body: object.reply, sender_type: 'AI', sent_at: now },
+          data: { ticket_id: ticketId, body: reply, sender_type: 'AI', sent_at: now },
         }),
         prisma.ticket.update({
           where: { id: ticketId },
           data: {
+            customer_name: resolvedName,
             category: object.category,
             priority: object.priority,
             status: 'AI_RESOLVED',
@@ -160,14 +178,14 @@ ${body}`,
           },
         }),
       ])
-      console.log(`[boss] ticket ${ticketId} → AI_RESOLVED (${object.category}/${object.priority})`)
+      console.log(`[boss] ticket ${ticketId} → AI_RESOLVED (${object.category}/${object.priority}) name="${resolvedName}"`)
 
       if (ticketContact) {
         sendReplyToCustomer({
           customerEmail: ticketContact.customer_email,
-          customerName: ticketContact.customer_name,
+          customerName: resolvedName,
           subject,
-          body: object.reply,
+          body: reply,
           emailThreadId: ticketContact.email_thread_id,
         }).catch((err) => console.error('[email] AI reply send failed', err))
       }
@@ -179,6 +197,7 @@ ${body}`,
           prisma.ticket.update({
             where: { id: ticketId },
             data: {
+              customer_name: resolvedName,
               category: object.category,
               priority: object.priority,
               status: 'OPEN',
@@ -192,18 +211,19 @@ ${body}`,
             update: { last_agent_id: assignedAgent },
           }),
         ])
-        console.log(`[boss] ticket ${ticketId} → OPEN (assigned to ${assignedAgent}) (${object.category}/${object.priority})`)
+        console.log(`[boss] ticket ${ticketId} → OPEN (assigned to ${assignedAgent}) name="${resolvedName}"`)
       } else {
         await prisma.ticket.update({
           where: { id: ticketId },
           data: {
+            customer_name: resolvedName,
             category: object.category,
             priority: object.priority,
             status: 'OPEN',
             last_updated_at: now,
           },
         })
-        console.log(`[boss] ticket ${ticketId} → OPEN (no eligible agent) (${object.category}/${object.priority})`)
+        console.log(`[boss] ticket ${ticketId} → OPEN (no eligible agent) name="${resolvedName}"`)
       }
     }
   }

@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import { requireAuth } from '../middleware/auth.ts'
-import { listTickets, getTicket, getStats, getTicketsByIds, updateTicket, createMessage, polishReply, summarizeTicket } from '../controllers/tickets.ts'
+import { listTickets, getTicket, getStats, getChartData, getTicketsByIds, updateTicket, createMessage, polishReply, summarizeTicket } from '../controllers/tickets.ts'
 
 export const ticketsRouter = Router()
 
 ticketsRouter.get('/stats', requireAuth, getStats)
+ticketsRouter.get('/chart', requireAuth, getChartData)
 ticketsRouter.get('/by-ids', requireAuth, getTicketsByIds)
 ticketsRouter.get('/', requireAuth, listTickets)
 ticketsRouter.get('/:id', requireAuth, getTicket)

@@ -1,9 +1,11 @@
 import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.ts'
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
 
 const listQuerySchema = z.object({
-  sortBy: z.enum(['subject', 'customer_name', 'status', 'priority', 'category', 'created_at', 'assigned_to']).optional(),
+  sortBy: z.enum(['subject', 'customer_name', 'status', 'priority', 'category', 'created_at', 'last_updated_at', 'assigned_to']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).optional(),
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
@@ -13,6 +15,10 @@ const listQuerySchema = z.object({
 })
 
 const createMessageSchema = z.object({
+  body: z.string().min(1, 'Reply cannot be empty').max(20_000, 'Reply is too long'),
+})
+
+const polishReplySchema = z.object({
   body: z.string().min(1, 'Reply cannot be empty').max(20_000, 'Reply is too long'),
 })
 
@@ -44,6 +50,8 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
     const primaryOrder =
       sortBy === 'assigned_to'
         ? { assigned_to: { name: sortOrder } }
+        : sortBy === 'last_updated_at'
+        ? { last_updated_at: { sort: sortOrder, nulls: 'last' as const } }
         : { [sortBy]: sortOrder }
     // Secondary sort by id keeps pagination stable when primary values are equal
     const orderBy = [primaryOrder, { id: 'asc' as const }]
@@ -83,6 +91,7 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
           priority: true,
           category: true,
           created_at: true,
+          last_updated_at: true,
           assigned_to: { select: { id: true, name: true, email: true } },
         },
         orderBy,
@@ -114,6 +123,7 @@ export async function createMessage(req: Request, res: Response, next: NextFunct
     const message = await prisma.message.create({
       data: { ticket_id: id, body: parsed.data.body, sender_type: 'AGENT' },
     })
+    await prisma.ticket.update({ where: { id }, data: { last_updated_at: message.sent_at } })
     res.status(201).json(message)
   } catch (err) { next(err) }
 }
@@ -135,6 +145,68 @@ export async function getTicket(req: Request, res: Response, next: NextFunction)
     }
 
     res.json(ticket)
+  } catch (err) { next(err) }
+}
+
+export async function summarizeTicket(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id },
+      include: { messages: { orderBy: { sent_at: 'asc' } } },
+    })
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+    if (req.user!.role === 'AGENT' && ticket.assigned_to_id !== req.user!.id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const thread = ticket.messages
+      .map(m => `[${m.sender_type}]: ${m.body}`)
+      .join('\n\n')
+
+    const { text } = await generateText({
+      model: openai('gpt-4.1-nano'),
+      system: `You are a helpdesk assistant. Summarize the support ticket concisely in 2–4 sentences covering: the customer's issue, what has been done so far, and the current status. Be factual and neutral. Return only the summary with no preamble.`,
+      prompt: `Ticket subject: ${ticket.subject}\nStatus: ${ticket.status}\nPriority: ${ticket.priority ?? 'None'}\nCategory: ${ticket.category ?? 'None'}\n\nMessage thread:\n${thread || '(no messages yet)'}`,
+    })
+
+    await prisma.ticket.update({ where: { id }, data: { summary: text } })
+
+    res.json({ summary: text })
+  } catch (err) { next(err) }
+}
+
+export async function polishReply(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = req.params
+    const parsed = polishReplySchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message })
+    }
+
+    const ticket = await prisma.ticket.findUnique({
+      where: { id },
+      include: { messages: { orderBy: { sent_at: 'asc' } } },
+    })
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' })
+
+    if (req.user!.role === 'AGENT' && ticket.assigned_to_id !== req.user!.id) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const thread = ticket.messages
+      .map(m => `[${m.sender_type}]: ${m.body}`)
+      .join('\n\n')
+
+    const { text } = await generateText({
+      model: openai('gpt-4.1-nano'),
+      system: `You are a professional helpdesk support agent assistant. Your job is to polish and improve draft replies written by support agents. Make replies clear, empathetic, professional, and concise. Keep the agent's core message and intent intact — only improve the tone, grammar, and clarity. Return only the improved reply text with no commentary or preamble.`,
+      prompt: `Ticket subject: ${ticket.subject}\n\nConversation so far:\n${thread || '(no messages yet)'}\n\nAgent's draft reply:\n${parsed.data.body}`,
+    })
+
+    res.json({ polished: text })
   } catch (err) { next(err) }
 }
 
@@ -169,9 +241,14 @@ export async function updateTicket(req: Request, res: Response, next: NextFuncti
       }
     }
 
+    const hasMeaningfulChange =
+      'status' in parsed.data ||
+      'priority' in parsed.data ||
+      'category' in parsed.data
+
     const updated = await prisma.ticket.update({
       where: { id },
-      data: parsed.data,
+      data: { ...parsed.data, ...(hasMeaningfulChange && { last_updated_at: new Date() }) },
       include: {
         messages: { orderBy: { sent_at: 'asc' } },
         assigned_to: { select: { id: true, name: true, email: true } },

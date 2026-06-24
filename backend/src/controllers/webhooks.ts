@@ -45,7 +45,7 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
           }),
           prisma.ticket.update({
             where: { id: existing.id },
-            data: { last_customer_reply_at: now },
+            data: { last_customer_reply_at: now, last_updated_at: now, summary: null },
           }),
         ])
         return res.json({ ticket_id: existing.id, action: 'message_added' })
@@ -61,6 +61,7 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
           customer_email: from_email,
           email_thread_id: message_id ?? null,
           last_customer_reply_at: now,
+          last_updated_at: now,
         },
       })
       await tx.message.create({

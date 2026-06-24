@@ -123,6 +123,8 @@ model Ticket {
   email_thread_id        String?         @unique
   is_ai_handled          Boolean         @default(false)
   last_customer_reply_at DateTime?
+  last_updated_at        DateTime?
+  summary                String?
   created_at             DateTime        @default(now())
   updated_at             DateTime        @updatedAt
   messages               Message[]

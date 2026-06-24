@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import axios from 'axios'
@@ -20,7 +20,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
   }
 })
 
-const mockedGet = vi.mocked(axios.get)
+const mockedGet  = vi.mocked(axios.get)
+const mockedPost = vi.mocked(axios.post)
 
 const adminSession = { user: { id: 'admin-1', name: 'Admin', email: 'admin@test.com', role: 'ADMIN' } }
 const agentSession = { user: { id: 'agent-1', name: 'Agent', email: 'agent@test.com', role: 'AGENT' } }
@@ -36,6 +37,7 @@ const mockTicket = {
   category: 'ACCOUNT' as const,
   created_at: '2024-01-15T10:00:00.000Z',
   assigned_to: null,
+  summary: null,
   messages: [
     {
       id: 'msg-1',
@@ -276,6 +278,215 @@ describe('TicketDetail page', () => {
     renderWithQuery(agentSession)
     await screen.findByRole('heading', { name: 'Cannot log in' })
     expect(screen.queryByRole('button', { name: 'Unassigned' })).not.toBeInTheDocument()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Polish button
+  // ---------------------------------------------------------------------------
+
+  it('agent sees the Polish button', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.getByRole('button', { name: /polish/i })).toBeInTheDocument()
+  })
+
+  it('Polish button is disabled when the textarea is empty', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.getByRole('button', { name: /^polish$/i })).toBeDisabled()
+  })
+
+  it('Polish button becomes enabled when text is entered', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'rough draft reply' },
+    })
+    expect(screen.getByRole('button', { name: /^polish$/i })).toBeEnabled()
+  })
+
+  it('admin does not see the Polish button', async () => {
+    mockedGet.mockImplementation((url: string) =>
+      url === '/api/users/agents'
+        ? Promise.resolve({ data: mockAgents })
+        : Promise.resolve({ data: mockTicket })
+    )
+    renderWithQuery(adminSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.queryByRole('button', { name: /polish/i })).not.toBeInTheDocument()
+  })
+
+  it('clicking Polish calls POST /api/tickets/:id/polish with the draft body', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: { polished: 'Polished reply text.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'rough draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^polish$/i }))
+
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith('/api/tickets/ticket-123/polish', { body: 'rough draft' })
+    )
+  })
+
+  it('Polish success replaces textarea content with the polished text', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: { polished: 'Polished reply text.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'rough draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^polish$/i }))
+
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText('Write your reply…')).toHaveValue('Polished reply text.')
+    )
+  })
+
+  it('Polish error shows an error message below the textarea', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockRejectedValue({ response: { data: { error: 'AI service unavailable' } } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'rough draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^polish$/i }))
+
+    expect(await screen.findByText('AI service unavailable')).toBeInTheDocument()
+  })
+
+  it('Send Reply is disabled while polishing is in progress', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    // Never resolves so we stay in the polishing state
+    mockedPost.mockReturnValue(new Promise(() => {}))
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.change(screen.getByPlaceholderText('Write your reply…'), {
+      target: { value: 'rough draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^polish$/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /polishing/i })).toBeInTheDocument()
+    )
+    expect(screen.getByRole('button', { name: 'Send Reply' })).toBeDisabled()
+  })
+
+  // ---------------------------------------------------------------------------
+  // Summary section
+  // ---------------------------------------------------------------------------
+
+  it('agent sees the summary section with "No summary generated yet." initially', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.getByText('Ticket Summary')).toBeInTheDocument()
+    expect(screen.getByText('No summary generated yet.')).toBeInTheDocument()
+  })
+
+  it('agent sees Generate Summary button initially', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.getByRole('button', { name: /generate summary/i })).toBeInTheDocument()
+  })
+
+  it('admin does not see the summary section', async () => {
+    mockedGet.mockImplementation((url: string) =>
+      url === '/api/users/agents'
+        ? Promise.resolve({ data: mockAgents })
+        : Promise.resolve({ data: mockTicket })
+    )
+    renderWithQuery(adminSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.queryByText('Ticket Summary')).not.toBeInTheDocument()
+  })
+
+  it('clicking Generate Summary calls POST /api/tickets/:id/summarize', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: { summary: 'The customer cannot log in. No resolution yet.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.click(screen.getByRole('button', { name: /generate summary/i }))
+
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith('/api/tickets/ticket-123/summarize')
+    )
+  })
+
+  it('summary text is displayed after successful generation', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: { summary: 'The customer cannot log in. No resolution yet.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.click(screen.getByRole('button', { name: /generate summary/i }))
+
+    expect(await screen.findByText('The customer cannot log in. No resolution yet.')).toBeInTheDocument()
+    expect(screen.queryByText('No summary generated yet.')).not.toBeInTheDocument()
+  })
+
+  it('button label changes to "Regenerate Summary" after a summary is generated', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockResolvedValue({ data: { summary: 'The customer cannot log in. No resolution yet.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.click(screen.getByRole('button', { name: /generate summary/i }))
+
+    expect(await screen.findByRole('button', { name: /regenerate summary/i })).toBeInTheDocument()
+  })
+
+  it('summary error is shown when the request fails', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockRejectedValue({ response: { data: { error: 'AI service unavailable' } } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.click(screen.getByRole('button', { name: /generate summary/i }))
+
+    expect(await screen.findByText('AI service unavailable')).toBeInTheDocument()
+  })
+
+  it('Generate Summary button is disabled while summarizing', async () => {
+    mockedGet.mockResolvedValue({ data: mockTicket })
+    mockedPost.mockReturnValue(new Promise(() => {}))
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+
+    fireEvent.click(screen.getByRole('button', { name: /generate summary/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /summarizing/i })).toBeDisabled()
+    )
+  })
+
+  it('pre-loads summary from DB when ticket already has a summary', async () => {
+    mockedGet.mockResolvedValue({ data: { ...mockTicket, summary: 'Pre-existing summary from DB.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.getByText('Pre-existing summary from DB.')).toBeInTheDocument()
+    expect(screen.queryByText('No summary generated yet.')).not.toBeInTheDocument()
+  })
+
+  it('shows Regenerate Summary button when ticket already has a summary', async () => {
+    mockedGet.mockResolvedValue({ data: { ...mockTicket, summary: 'Pre-existing summary from DB.' } })
+    renderWithQuery(agentSession)
+    await screen.findByRole('heading', { name: 'Cannot log in' })
+    expect(screen.getByRole('button', { name: /regenerate summary/i })).toBeInTheDocument()
   })
 
   // ---------------------------------------------------------------------------

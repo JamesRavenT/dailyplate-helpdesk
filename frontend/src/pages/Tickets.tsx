@@ -27,6 +27,7 @@ type TicketListItem = {
   priority: Priority | null
   category: Category | null
   created_at: string
+  last_updated_at: string | null
   assigned_to: Agent | null
 }
 
@@ -137,7 +138,7 @@ export default function Tickets() {
 
   const queryClient = useQueryClient()
   const [modal, setModal] = useState<ModalState>(null)
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }])
+  const [sorting, setSorting] = useState<SortingState>([{ id: 'last_updated_at', desc: true }])
   const [filterCategory, setFilterCategory] = useState<Category | ''>('')
   const [filterStatus, setFilterStatus] = useState<TicketStatus | ''>('')
   const [searchInput, setSearchInput] = useState('')
@@ -275,11 +276,11 @@ export default function Tickets() {
     }
 
     base.push({
-      accessorKey: 'created_at',
-      header: 'Received',
+      accessorKey: 'last_updated_at',
+      header: 'Last Update',
       cell: ({ row }) => (
         <span className="text-gray-500">
-          {new Date(row.original.created_at).toLocaleDateString()}
+          {new Date(row.original.last_updated_at ?? row.original.created_at).toLocaleDateString()}
         </span>
       ),
     })

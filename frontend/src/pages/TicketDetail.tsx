@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Sparkles } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import { Skeleton } from '../components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,7 @@ type TicketDetail = {
   created_at: string
   assigned_to: { id: string; name: string } | null
   messages: Message[]
+  summary: string | null
 }
 
 type PatchBody = {
@@ -111,8 +112,15 @@ export default function TicketDetail() {
   const [updateError, setUpdateError] = useState<string | null>(null)
 
   // Reply state
-  const [replyBody,  setReplyBody]  = useState('')
-  const [replyError, setReplyError] = useState<string | null>(null)
+  const [replyBody,    setReplyBody]    = useState('')
+  const [replyError,   setReplyError]   = useState<string | null>(null)
+  const [isPolishing,    setIsPolishing]    = useState(false)
+  const [polishError,    setPolishError]    = useState<string | null>(null)
+
+  // Summary state
+  const [summary,        setSummary]        = useState<string | null>(null)
+  const [isSummarizing,  setIsSummarizing]  = useState(false)
+  const [summaryError,   setSummaryError]   = useState<string | null>(null)
 
   // Agent modal (admin only)
   const [agentModal, setAgentModal] = useState(false)
@@ -123,6 +131,7 @@ export default function TicketDetail() {
       setStatus(ticket.status)
       setPriority(ticket.priority ?? '')
       setCategory(ticket.category ?? '')
+      setSummary(ticket.summary ?? null)
     }
   }, [ticket?.id])
 
@@ -164,6 +173,33 @@ export default function TicketDetail() {
       setReplyError(err?.response?.data?.error ?? 'Failed to send reply')
     },
   })
+
+  const handlePolish = async () => {
+    if (!replyBody.trim()) return
+    setIsPolishing(true)
+    setPolishError(null)
+    try {
+      const { data } = await axios.post<{ polished: string }>(`/api/tickets/${id}/polish`, { body: replyBody.trim() })
+      setReplyBody(data.polished)
+    } catch (err: any) {
+      setPolishError(err?.response?.data?.error ?? 'Failed to polish reply')
+    } finally {
+      setIsPolishing(false)
+    }
+  }
+
+  const handleSummarize = async () => {
+    setIsSummarizing(true)
+    setSummaryError(null)
+    try {
+      const { data } = await axios.post<{ summary: string }>(`/api/tickets/${id}/summarize`)
+      setSummary(data.summary)
+    } catch (err: any) {
+      setSummaryError(err?.response?.data?.error ?? 'Failed to generate summary')
+    } finally {
+      setIsSummarizing(false)
+    }
+  }
 
   const handleUpdate = () => {
     const body: PatchBody = {
@@ -284,20 +320,32 @@ export default function TicketDetail() {
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   />
                   {replyError && <p className="mt-1.5 text-sm text-red-600">{replyError}</p>}
+                  {polishError && <p className="mt-1.5 text-sm text-red-600">{polishError}</p>}
                   <div className="flex items-center justify-between mt-3">
                     <p className="text-xs text-gray-400">Ctrl + Enter to send</p>
-                    <Button
-                      onClick={() => replyMutation.mutate(replyBody.trim())}
-                      disabled={replyMutation.isPending || !replyBody.trim()}
-                    >
-                      {replyMutation.isPending ? 'Sending…' : 'Send Reply'}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={handlePolish}
+                        disabled={isPolishing || replyMutation.isPending || !replyBody.trim()}
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        {isPolishing ? 'Polishing…' : 'Polish'}
+                      </Button>
+                      <Button
+                        onClick={() => replyMutation.mutate(replyBody.trim())}
+                        disabled={replyMutation.isPending || isPolishing || !replyBody.trim()}
+                      >
+                        {replyMutation.isPending ? 'Sending…' : 'Send Reply'}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* ── Right: update panel ── */}
+            {/* ── Right: update panel + summary ── */}
+            <div className="space-y-4">
             <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
               <h2 className="text-sm font-medium text-gray-700">Update Ticket</h2>
 
@@ -371,6 +419,29 @@ export default function TicketDetail() {
               >
                 {mutation.isPending ? 'Saving…' : 'Save Changes'}
               </Button>
+            </div>
+
+            {/* Summary — agents only */}
+            {!isAdmin && (
+              <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
+                <h2 className="text-sm font-medium text-gray-700">Ticket Summary</h2>
+                {summary ? (
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{summary}</p>
+                ) : (
+                  <p className="text-sm text-gray-400">No summary generated yet.</p>
+                )}
+                {summaryError && <p className="text-sm text-red-600">{summaryError}</p>}
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleSummarize}
+                  disabled={isSummarizing}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {isSummarizing ? 'Summarizing…' : summary ? 'Regenerate Summary' : 'Generate Summary'}
+                </Button>
+              </div>
+            )}
             </div>
 
           </div>

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { openai } from '@ai-sdk/openai'
 import { generateObject } from 'ai'
 import { prisma } from './prisma.ts'
+import { sendReplyToCustomer } from './email.ts'
 
 export const boss = new PgBoss(process.env.DATABASE_URL!)
 
@@ -45,10 +46,15 @@ async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
     const firstName = customerName.split(' ')[0]
     const now = new Date()
 
+    const ticketContact = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      select: { customer_email: true, customer_name: true, email_thread_id: true },
+    })
+
     const { object } = await generateObject({
       model: openai('gpt-4.1-nano'),
       schema: processSchema,
-      system: `You are an AI support agent for KaKuBiz. For each incoming ticket you must:
+      system: `You are an AI support agent for BizTest. For each incoming ticket you must:
 
 1. Classify it (category + priority).
 2. Decide if you can fully resolve it with one accurate, factual reply.
@@ -72,7 +78,7 @@ When canResolve=true, write a complete reply in the reply field:
 - Open with "Dear ${firstName},"
 - Warm, empathetic, professional tone
 - Answer clearly and completely using only factual, general information
-- Close with "\\n\\nBest regards,\\nKaKuBiz Support Team"
+- Close with "\\n\\nBest regards,\\nBizTest Support Team"
 
 When canResolve=false, set reply to an empty string "".
 
@@ -113,6 +119,16 @@ ${body}`,
         }),
       ])
       console.log(`[boss] ticket ${ticketId} → AI_RESOLVED (${object.category}/${object.priority})`)
+
+      if (ticketContact) {
+        sendReplyToCustomer({
+          customerEmail: ticketContact.customer_email,
+          customerName: ticketContact.customer_name,
+          subject,
+          body: object.reply,
+          emailThreadId: ticketContact.email_thread_id,
+        }).catch((err) => console.error('[email] AI reply send failed', err))
+      }
     } else {
       await prisma.ticket.update({
         where: { id: ticketId },

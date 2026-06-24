@@ -31,6 +31,9 @@ app.use('/api/auth/sign-in', rateLimit({
 // Must be before express.json() — Better Auth parses its own request bodies
 app.all('/api/auth/*', toNodeHandler(auth))
 
+// Capture raw body for Resend webhook signature verification (must be before express.json)
+app.use('/api/webhooks/resend-inbound', express.raw({ type: 'application/json' }))
+
 app.use(express.json({ limit: '100kb' }))
 app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 

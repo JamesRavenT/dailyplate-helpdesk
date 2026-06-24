@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma.ts'
 import { openai } from '@ai-sdk/openai'
 import { generateText } from 'ai'
+import { sendReplyToCustomer } from '../lib/email.ts'
 
 const listQuerySchema = z.object({
   sortBy: z.enum(['subject', 'customer_name', 'status', 'priority', 'category', 'created_at', 'last_updated_at', 'assigned_to']).optional(),
@@ -127,6 +128,14 @@ export async function createMessage(req: Request, res: Response, next: NextFunct
     })
     await prisma.ticket.update({ where: { id }, data: { last_updated_at: message.sent_at } })
     res.status(201).json(message)
+
+    sendReplyToCustomer({
+      customerEmail: ticket.customer_email,
+      customerName: ticket.customer_name,
+      subject: ticket.subject,
+      body: parsed.data.body,
+      emailThreadId: ticket.email_thread_id,
+    }).catch((err) => console.error('[email] agent reply send failed', err))
   } catch (err) { next(err) }
 }
 

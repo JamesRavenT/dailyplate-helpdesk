@@ -9,7 +9,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Brain, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import { Skeleton } from '../components/ui/skeleton'
 import { authClient } from '../lib/auth-client'
@@ -29,6 +29,7 @@ type TicketListItem = {
   created_at: string
   last_updated_at: string | null
   assigned_to: Agent | null
+  is_ai_handled: boolean
 }
 
 type TicketsResponse = {
@@ -260,19 +261,23 @@ export default function Tickets() {
         accessorFn: row => row.assigned_to?.id ?? null,
         header: 'Agent',
         cell: ({ row }) => {
-          const { id, assigned_to } = row.original
+          const { id, assigned_to, is_ai_handled } = row.original
+          const btnClass = "mx-auto flex items-center justify-center w-20 text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors"
           return assigned_to ? (
             <button
               onClick={() => setModal({ mode: 'view', ticketId: id, agent: assigned_to })}
               title={assigned_to.name}
-              className="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors"
+              className={btnClass}
             >
-              👤
+              {is_ai_handled
+                ? <Brain className="h-4 w-4 text-purple-500" />
+                : <User className="h-4 w-4 text-gray-500" />
+              }
             </button>
           ) : (
             <button
               onClick={() => setModal({ mode: 'assign', ticketId: id })}
-              className="text-xs font-medium text-gray-900 border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors"
+              className={`${btnClass} text-gray-900`}
             >
               Assign
             </button>

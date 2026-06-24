@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { trackRecentView } from '../lib/recentViews'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { ArrowLeft, Sparkles } from 'lucide-react'
+import { ArrowLeft, Brain, Sparkles, User } from 'lucide-react'
 import Navbar from '../components/Navbar'
 import { Skeleton } from '../components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -32,6 +33,7 @@ type TicketDetail = {
   category: TicketCategory | null
   created_at: string
   assigned_to: { id: string; name: string } | null
+  is_ai_handled: boolean
   messages: Message[]
   summary: string | null
 }
@@ -141,13 +143,22 @@ export default function TicketDetail() {
     }
   }, [ticket?.id])
 
+  // Track this ticket as recently viewed
+  useEffect(() => {
+    const userId = (session?.user as { id?: string } | undefined)?.id
+    if (ticket && userId) {
+      trackRecentView(userId, ticket.id)
+    }
+  }, [ticket?.id, (session?.user as { id?: string } | undefined)?.id])
+
   const mutation = useMutation({
     mutationFn: (body: PatchBody) =>
       axios.patch<TicketDetail>(`/api/tickets/${id}`, body).then(r => r.data),
     onSuccess: (updated) => {
       queryClient.setQueryData(['tickets', id], updated)
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
-      setStatus(updated.status)
+      const humanStatuses: HumanStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
+      setStatus(humanStatuses.includes(updated.status as HumanStatus) ? updated.status as HumanStatus : '')
       setPriority(updated.priority ?? '')
       setCategory(updated.category ?? '')
       setUpdateError(null)
@@ -361,9 +372,21 @@ export default function TicketDetail() {
                   <span className="text-xs text-gray-500">Agent</span>
                   <button
                     onClick={() => setAgentModal(true)}
-                    className="w-full text-left text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white hover:bg-gray-50 transition-colors text-gray-800 truncate"
+                    className="w-full text-left text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white hover:bg-gray-50 transition-colors text-gray-800 truncate flex items-center gap-1.5"
                   >
-                    {ticket.assigned_to ? ticket.assigned_to.name : <span className="text-gray-400">Unassigned</span>}
+                    {ticket.is_ai_handled ? (
+                      <>
+                        <Brain className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+                        <span>{ticket.assigned_to?.name ?? 'AI Agent'}</span>
+                      </>
+                    ) : ticket.assigned_to ? (
+                      <>
+                        <User className="h-3.5 w-3.5 shrink-0 text-gray-500" />
+                        <span>{ticket.assigned_to.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-400">Unassigned</span>
+                    )}
                   </button>
                 </div>
               )}

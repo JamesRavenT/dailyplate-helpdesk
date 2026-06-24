@@ -93,6 +93,7 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
           category: true,
           created_at: true,
           last_updated_at: true,
+          is_ai_handled: true,
           assigned_to: { select: { id: true, name: true, email: true } },
         },
         orderBy,
@@ -208,6 +209,90 @@ export async function polishReply(req: Request, res: Response, next: NextFunctio
     })
 
     res.json({ polished: text })
+  } catch (err) { next(err) }
+}
+
+export async function getStats(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = req.user!
+
+    if (user.role === 'ADMIN') {
+      const [total, ongoing, resolvedByAI, resolvedByAgents, critical] = await Promise.all([
+        prisma.ticket.count({ where: { status: { not: 'AI_PROCESSING' } } }),
+        prisma.ticket.count({ where: { status: 'IN_PROGRESS' } }),
+        prisma.ticket.count({
+          where: {
+            OR: [
+              { status: 'AI_RESOLVED' },
+              { status: 'RESOLVED', is_ai_handled: true },
+            ],
+          },
+        }),
+        prisma.ticket.count({ where: { status: 'RESOLVED', is_ai_handled: false } }),
+        prisma.ticket.count({
+          where: {
+            severity: 'CRITICAL',
+            status: { notIn: ['RESOLVED', 'CLOSED', 'AI_RESOLVED'] },
+          },
+        }),
+      ])
+      return res.json({ total, ongoing, resolvedByAI, resolvedByAgents, critical })
+    }
+
+    // Agent
+    const agentId = user.id
+    const [total, ongoing, resolved, openTickets] = await Promise.all([
+      prisma.ticket.count({ where: { assigned_to_id: agentId } }),
+      prisma.ticket.count({ where: { assigned_to_id: agentId, status: 'IN_PROGRESS' } }),
+      prisma.ticket.count({ where: { assigned_to_id: agentId, status: 'RESOLVED' } }),
+      prisma.ticket.findMany({
+        where: { assigned_to_id: agentId, status: 'OPEN' },
+        orderBy: [
+          { last_updated_at: { sort: 'desc', nulls: 'last' } },
+          { created_at: 'desc' },
+        ],
+        take: 5,
+        select: {
+          id: true,
+          subject: true,
+          customer_name: true,
+          status: true,
+          priority: true,
+          created_at: true,
+          last_updated_at: true,
+        },
+      }),
+    ])
+    return res.json({ total, ongoing, resolved, openTickets })
+  } catch (err) { next(err) }
+}
+
+export async function getTicketsByIds(req: Request, res: Response, next: NextFunction) {
+  try {
+    const ids = (req.query.ids as string ?? '').split(',').filter(Boolean).slice(0, 10)
+    if (ids.length === 0) return res.json([])
+
+    const where: any = { id: { in: ids } }
+    if (req.user!.role === 'AGENT') {
+      where.assigned_to_id = req.user!.id
+    }
+
+    const tickets = await prisma.ticket.findMany({
+      where,
+      select: {
+        id: true,
+        subject: true,
+        customer_name: true,
+        status: true,
+        priority: true,
+        created_at: true,
+        last_updated_at: true,
+      },
+    })
+
+    // Return in the same order as requested
+    const byId = new Map(tickets.map(t => [t.id, t]))
+    return res.json(ids.map(id => byId.get(id)).filter(Boolean))
   } catch (err) { next(err) }
 }
 

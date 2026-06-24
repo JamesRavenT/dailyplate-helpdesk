@@ -200,7 +200,7 @@ export default function Tickets() {
         cell: ({ row }) => (
           <div className="flex flex-col gap-1">
             <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium w-fit ${statusBadgeClass[row.original.status]}`}>
-              <span className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${statusDotClass[row.original.status]}`} />
+              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass[row.original.status]}`} />
               {statusLabels[row.original.status]}
             </span>
             <Link

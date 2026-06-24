@@ -6,7 +6,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import * as Sentry from '@sentry/node'
 import { toNodeHandler } from 'better-auth/node'
-import { auth } from './lib/auth.ts'
+import { auth, trustedOrigins } from './lib/auth.ts'
 import { router } from './routes/index.ts'
 import { errorHandler } from './middleware/errorHandler.ts'
 import { startBoss } from './lib/boss.ts'
@@ -23,7 +23,7 @@ app.set('trust proxy', 1)
 app.use(helmet({ contentSecurityPolicy: false }))
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+  origin: trustedOrigins,
   credentials: true,
 }))
 

@@ -8,9 +8,18 @@ WORKDIR /fe
 COPY frontend/package.json frontend/bun.lock* ./
 RUN bun install
 COPY frontend/ ./
-# Optional: bake the frontend Sentry DSN at build time (Vite inlines VITE_* vars).
+# Frontend Sentry — all build-time. VITE_SENTRY_DSN is inlined into the bundle (runtime
+# error reporting). The SENTRY_AUTH_TOKEN/ORG/PROJECT trio enables source-map upload during
+# the build so stack traces in Sentry are de-minified (optional — skipped if unset).
+# On Railway these are passed automatically from same-named service variables (they're ARGs).
 ARG VITE_SENTRY_DSN=""
-ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ARG SENTRY_AUTH_TOKEN=""
+ARG SENTRY_ORG=""
+ARG SENTRY_PROJECT=""
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN \
+    SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN \
+    SENTRY_ORG=$SENTRY_ORG \
+    SENTRY_PROJECT=$SENTRY_PROJECT
 RUN bun run build
 
 # ---- Stage 2: backend runtime (also serves the built SPA) ----

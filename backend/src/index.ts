@@ -7,6 +7,7 @@ import { toNodeHandler } from 'better-auth/node'
 import { auth } from './lib/auth.ts'
 import { router } from './routes/index.ts'
 import { errorHandler } from './middleware/errorHandler.ts'
+import { startBoss } from './lib/boss.ts'
 
 dotenv.config()
 
@@ -43,4 +44,5 @@ app.use(errorHandler)
 
 app.listen(port, () => {
   console.log(`Backend running on http://localhost:${port}`)
+  startBoss().catch((err) => console.error('[boss] startup failed:', err))
 })

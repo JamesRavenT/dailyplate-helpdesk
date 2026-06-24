@@ -8,7 +8,7 @@ const listQuerySchema = z.object({
   sortBy: z.enum(['subject', 'customer_name', 'status', 'priority', 'category', 'created_at', 'last_updated_at', 'assigned_to']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
   category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).optional(),
-  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'AI_RESOLVED']).optional(),
   search: z.string().max(200).optional(),
   page: z.string().optional(),
   pageSize: z.string().optional(),
@@ -62,14 +62,15 @@ export async function listTickets(req: Request, res: Response, next: NextFunctio
 
     if (req.user!.role === 'AGENT') {
       where.assigned_to_id = req.user!.id
-      // Agents only see active tickets
+      // Agents only see active tickets (AI statuses are excluded implicitly)
       if (status === 'OPEN' || status === 'IN_PROGRESS') {
         where.status = status
       } else {
         where.status = { in: ['OPEN', 'IN_PROGRESS'] }
       }
-    } else if (status) {
-      where.status = status
+    } else {
+      // Hide AI_PROCESSING from admins — ticket is mid-resolution, prevent agent interference
+      where.status = status ?? { not: 'AI_PROCESSING' }
     }
     if (search) {
       where.OR = [

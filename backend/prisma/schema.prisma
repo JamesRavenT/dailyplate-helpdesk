@@ -16,6 +16,8 @@ enum TicketStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
+  AI_PROCESSING
+  AI_RESOLVED
 }
 
 enum TicketCategory {

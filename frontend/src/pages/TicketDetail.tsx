@@ -8,7 +8,7 @@ import { Skeleton } from '../components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { authClient } from '../lib/auth-client'
 
-type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
+type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'AI_PROCESSING' | 'AI_RESOLVED'
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
 type TicketCategory = 'ACCOUNT' | 'INQUIRY' | 'REFUND' | 'TECHNICAL' | 'VOUCHER' | 'OTHER'
 type SenderType = 'CUSTOMER' | 'AGENT' | 'AI'
@@ -36,8 +36,9 @@ type TicketDetail = {
   summary: string | null
 }
 
+type HumanStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
 type PatchBody = {
-  status?: TicketStatus
+  status?: HumanStatus
   priority?: Priority | null
   category?: TicketCategory | null
   assigned_to_id?: string | null
@@ -58,6 +59,8 @@ const statusStyles: Record<TicketStatus, string> = {
   IN_PROGRESS: 'bg-amber-100 text-amber-700',
   RESOLVED: 'bg-green-100 text-green-700',
   CLOSED: 'bg-gray-100 text-gray-600',
+  AI_PROCESSING: 'bg-purple-100 text-purple-700',
+  AI_RESOLVED: 'bg-emerald-100 text-emerald-700',
 }
 
 const statusLabels: Record<TicketStatus, string> = {
@@ -65,6 +68,8 @@ const statusLabels: Record<TicketStatus, string> = {
   IN_PROGRESS: 'In Progress',
   RESOLVED: 'Resolved',
   CLOSED: 'Closed',
+  AI_PROCESSING: 'AI Processing',
+  AI_RESOLVED: 'AI Resolved',
 }
 
 const senderStyles: Record<SenderType, { bubble: string; label: string; align: string }> = {
@@ -106,7 +111,7 @@ export default function TicketDetail() {
   })
 
   // Update panel state — seeded from ticket once loaded
-  const [status,   setStatus]   = useState<TicketStatus | ''>('')
+  const [status,   setStatus]   = useState<HumanStatus | ''>('')
   const [priority, setPriority] = useState<Priority | ''>('')
   const [category, setCategory] = useState<TicketCategory | ''>('')
   const [updateError, setUpdateError] = useState<string | null>(null)
@@ -128,7 +133,8 @@ export default function TicketDetail() {
   // Seed dropdowns when ticket loads / changes
   useEffect(() => {
     if (ticket) {
-      setStatus(ticket.status)
+      const humanStatuses: HumanStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
+      setStatus(humanStatuses.includes(ticket.status as HumanStatus) ? ticket.status as HumanStatus : '')
       setPriority(ticket.priority ?? '')
       setCategory(ticket.category ?? '')
       setSummary(ticket.summary ?? null)
@@ -203,7 +209,7 @@ export default function TicketDetail() {
 
   const handleUpdate = () => {
     const body: PatchBody = {
-      status: status as TicketStatus,
+      ...(status && { status }),
       priority: (priority as Priority) || null,
       category: (category as TicketCategory) || null,
     }
@@ -211,7 +217,7 @@ export default function TicketDetail() {
   }
 
   const nothingChanged = !ticket
-    || (status   === ticket.status
+    || ((!status || status === ticket.status)
      && priority === (ticket.priority ?? '')
      && category === (ticket.category ?? ''))
 
@@ -367,9 +373,14 @@ export default function TicketDetail() {
                 <select
                   id="td-status"
                   value={status}
-                  onChange={e => setStatus(e.target.value as TicketStatus)}
+                  onChange={e => setStatus(e.target.value as HumanStatus)}
                   className={selectClass}
                 >
+                  {!status && (
+                    <option value="" disabled>
+                      {statusLabels[ticket.status]} — select to override
+                    </option>
+                  )}
                   <option value="OPEN">Open</option>
                   <option value="IN_PROGRESS">In Progress</option>
                   <option value="RESOLVED">Resolved</option>

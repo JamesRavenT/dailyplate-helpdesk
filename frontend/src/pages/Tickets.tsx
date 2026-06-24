@@ -14,7 +14,7 @@ import Navbar from '../components/Navbar'
 import { Skeleton } from '../components/ui/skeleton'
 import { authClient } from '../lib/auth-client'
 
-type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
+type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'AI_PROCESSING' | 'AI_RESOLVED'
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
 type Category = 'ACCOUNT' | 'INQUIRY' | 'REFUND' | 'TECHNICAL' | 'VOUCHER' | 'OTHER'
 
@@ -52,6 +52,8 @@ const statusLabels: Record<TicketStatus, string> = {
   IN_PROGRESS: 'In Progress',
   RESOLVED: 'Resolved',
   CLOSED: 'Closed',
+  AI_PROCESSING: 'AI Processing',
+  AI_RESOLVED: 'AI Resolved',
 }
 
 const statusBadgeClass: Record<TicketStatus, string> = {
@@ -59,6 +61,8 @@ const statusBadgeClass: Record<TicketStatus, string> = {
   IN_PROGRESS: 'bg-amber-100 text-amber-700',
   RESOLVED: 'bg-green-100 text-green-700',
   CLOSED: 'bg-gray-100 text-gray-600',
+  AI_PROCESSING: 'bg-purple-100 text-purple-700',
+  AI_RESOLVED: 'bg-emerald-100 text-emerald-700',
 }
 
 const statusDotClass: Record<TicketStatus, string> = {
@@ -66,6 +70,8 @@ const statusDotClass: Record<TicketStatus, string> = {
   IN_PROGRESS: 'bg-amber-500',
   RESOLVED: 'bg-green-500',
   CLOSED: 'bg-gray-400',
+  AI_PROCESSING: 'bg-purple-500',
+  AI_RESOLVED: 'bg-emerald-500',
 }
 
 const categoryLabels: Record<Category, string> = {

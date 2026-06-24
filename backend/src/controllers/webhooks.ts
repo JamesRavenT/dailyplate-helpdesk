@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.ts'
+import { boss, PROCESS_QUEUE } from '../lib/boss.ts'
 
 const inboundEmailSchema = z.object({
   from_email: z.string().email('Invalid from_email').max(254),
@@ -39,13 +40,19 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
         where: { email_thread_id: in_reply_to },
       })
       if (existing) {
+        const wasAiResolved = existing.status === 'AI_RESOLVED'
         await prisma.$transaction([
           prisma.message.create({
             data: { ticket_id: existing.id, body, sender_type: 'CUSTOMER', sent_at: now },
           }),
           prisma.ticket.update({
             where: { id: existing.id },
-            data: { last_customer_reply_at: now, last_updated_at: now, summary: null },
+            data: {
+              last_customer_reply_at: now,
+              last_updated_at: now,
+              summary: null,
+              ...(wasAiResolved && { status: 'OPEN', assigned_to_id: null }),
+            },
           }),
         ])
         return res.json({ ticket_id: existing.id, action: 'message_added' })
@@ -60,6 +67,7 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
           customer_name: from_name ?? from_email,
           customer_email: from_email,
           email_thread_id: message_id ?? null,
+          status: 'AI_PROCESSING',
           last_customer_reply_at: now,
           last_updated_at: now,
         },
@@ -71,5 +79,13 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
     })
 
     res.status(201).json({ ticket_id: ticket.id, action: 'ticket_created' })
+
+    // Enqueue classification job — non-blocking, persisted, retried on failure
+    boss.send(PROCESS_QUEUE, {
+      ticketId: ticket.id,
+      customerName: ticket.customer_name,
+      subject,
+      body,
+    }).catch((err) => console.error('[boss] enqueue failed for ticket', ticket.id, err))
   } catch (err) { next(err) }
 }

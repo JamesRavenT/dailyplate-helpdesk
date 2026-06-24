@@ -14,14 +14,14 @@ export const AI_AGENT_ID = 'ai-system-agent'
 async function ensureAiUser() {
   await prisma.user.upsert({
     where: { id: AI_AGENT_ID },
-    update: {},
+    update: { is_active: true },
     create: {
       id: AI_AGENT_ID,
       name: 'AI Agent',
       email: 'ai@system.internal',
       emailVerified: false,
       role: 'AGENT',
-      is_active: false,
+      is_active: true,
     },
   })
 }
@@ -39,6 +39,48 @@ const processSchema = z.object({
   canResolve: z.boolean(),
   reply: z.string(),
 })
+
+async function findNextAgent(): Promise<string | null> {
+  const state = await prisma.roundRobinState.upsert({
+    where: { id: 1 },
+    create: { id: 1, last_agent_id: null },
+    update: {},
+  })
+
+  // Only agents that are ONLINE or AWAY are "on queue"
+  const agents = await prisma.user.findMany({
+    where: {
+      role: 'AGENT',
+      is_active: true,
+      id: { not: AI_AGENT_ID },
+      online_status: { in: ['ONLINE', 'AWAY'] },
+    },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  })
+
+  if (agents.length === 0) return null
+
+  const openCounts = await prisma.ticket.groupBy({
+    by: ['assigned_to_id'],
+    where: {
+      assigned_to_id: { in: agents.map((a) => a.id) },
+      status: { in: ['OPEN', 'IN_PROGRESS'] },
+    },
+    _count: { id: true },
+  })
+  const countMap = new Map(openCounts.map((r) => [r.assigned_to_id!, r._count.id]))
+
+  const lastIdx = agents.findIndex((a) => a.id === state.last_agent_id)
+  const startIdx = (lastIdx + 1) % agents.length
+
+  for (let i = 0; i < agents.length; i++) {
+    const agent = agents[(startIdx + i) % agents.length]
+    if ((countMap.get(agent.id) ?? 0) < 5) return agent.id
+  }
+
+  return null
+}
 
 async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
   for (const job of jobs) {
@@ -130,16 +172,39 @@ ${body}`,
         }).catch((err) => console.error('[email] AI reply send failed', err))
       }
     } else {
-      await prisma.ticket.update({
-        where: { id: ticketId },
-        data: {
-          category: object.category,
-          priority: object.priority,
-          status: 'OPEN',
-          last_updated_at: now,
-        },
-      })
-      console.log(`[boss] ticket ${ticketId} → OPEN (${object.category}/${object.priority})`)
+      const assignedAgent = await findNextAgent()
+
+      if (assignedAgent) {
+        await prisma.$transaction([
+          prisma.ticket.update({
+            where: { id: ticketId },
+            data: {
+              category: object.category,
+              priority: object.priority,
+              status: 'OPEN',
+              assigned_to_id: assignedAgent,
+              last_updated_at: now,
+            },
+          }),
+          prisma.roundRobinState.upsert({
+            where: { id: 1 },
+            create: { id: 1, last_agent_id: assignedAgent },
+            update: { last_agent_id: assignedAgent },
+          }),
+        ])
+        console.log(`[boss] ticket ${ticketId} → OPEN (assigned to ${assignedAgent}) (${object.category}/${object.priority})`)
+      } else {
+        await prisma.ticket.update({
+          where: { id: ticketId },
+          data: {
+            category: object.category,
+            priority: object.priority,
+            status: 'OPEN',
+            last_updated_at: now,
+          },
+        })
+        console.log(`[boss] ticket ${ticketId} → OPEN (no eligible agent) (${object.category}/${object.priority})`)
+      }
     }
   }
 }

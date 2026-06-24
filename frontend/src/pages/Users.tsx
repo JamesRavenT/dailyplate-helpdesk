@@ -10,13 +10,34 @@ import EditUserDialog from '../components/EditUserDialog'
 import DeleteUserDialog from '../components/DeleteUserDialog'
 import LockUserDialog from '../components/LockUserDialog'
 
+type AgentStatus = 'ONLINE' | 'AWAY' | 'MEETING' | 'OFFLINE'
+
 type User = {
   id: string
   name: string
   email: string
   role: 'ADMIN' | 'AGENT'
   is_active: boolean
+  online_status: AgentStatus
   createdAt: string
+}
+
+function onlineDot(status: AgentStatus) {
+  switch (status) {
+    case 'ONLINE':  return 'bg-green-500'
+    case 'AWAY':    return 'bg-yellow-400'
+    case 'MEETING': return 'bg-red-500'
+    default:        return 'bg-gray-300'
+  }
+}
+
+function onlineLabel(status: AgentStatus) {
+  switch (status) {
+    case 'ONLINE':  return 'Online'
+    case 'AWAY':    return 'Away'
+    case 'MEETING': return 'Meeting'
+    default:        return 'Offline'
+  }
 }
 
 async function fetchUsers(): Promise<User[]> {
@@ -65,6 +86,7 @@ export default function Users() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Role</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Availability</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Member Since</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -76,6 +98,7 @@ export default function Users() {
                     <td className="px-4 py-3"><Skeleton className="h-4 w-48" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-14 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-14 rounded-full" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-5 w-20 rounded-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-4 py-3"><div className="flex justify-end gap-1"><Skeleton className="h-7 w-7 rounded-md" /><Skeleton className="h-7 w-7 rounded-md" /><Skeleton className="h-7 w-7 rounded-md" /></div></td>
                   </tr>
@@ -98,6 +121,7 @@ export default function Users() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Email</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Role</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Availability</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Member Since</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -105,7 +129,7 @@ export default function Users() {
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                       No users found.
                     </td>
                   </tr>
@@ -132,8 +156,18 @@ export default function Users() {
                             ? 'bg-green-100 text-green-700'
                             : 'bg-red-100 text-red-600'
                         }`}>
-                          {user.is_active ? 'Active' : 'Inactive'}
+                          {user.is_active ? 'Active' : 'Locked'}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.role === 'AGENT' ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`h-2 w-2 rounded-full ${onlineDot(user.online_status)}`} />
+                            <span className="text-xs text-gray-600">{onlineLabel(user.online_status)}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-500">
                         {new Date(user.createdAt).toLocaleDateString()}

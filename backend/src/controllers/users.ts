@@ -35,11 +35,54 @@ const _createAuth = betterAuth({
   emailAndPassword: { enabled: true },
 })
 
+const updateStatusSchema = z.object({
+  status: z.enum(['ONLINE', 'AWAY', 'MEETING', 'OFFLINE']),
+})
+
+async function drainQueueForAgent(agentId: string) {
+  const currentCount = await prisma.ticket.count({
+    where: { assigned_to_id: agentId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
+  })
+  const slotsAvailable = Math.max(0, 5 - currentCount)
+  if (slotsAvailable === 0) return
+
+  const queued = await prisma.ticket.findMany({
+    where: { assigned_to_id: null, status: 'OPEN' },
+    orderBy: { created_at: 'asc' },
+    take: slotsAvailable,
+    select: { id: true },
+  })
+  if (queued.length === 0) return
+
+  await prisma.ticket.updateMany({
+    where: { id: { in: queued.map((t) => t.id) } },
+    data: { assigned_to_id: agentId, status: 'OPEN', last_updated_at: new Date() },
+  })
+  console.log(`[queue] drained ${queued.length} ticket(s) → agent ${agentId}`)
+}
+
+export async function updateAgentStatus(req: Request, res: Response, next: NextFunction) {
+  try {
+    const parsed = updateStatusSchema.safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0].message })
+    const { status } = parsed.data
+    const agentId = req.user!.id
+
+    await prisma.user.update({ where: { id: agentId }, data: { online_status: status } })
+
+    if (status === 'ONLINE' || status === 'AWAY') {
+      await drainQueueForAgent(agentId)
+    }
+
+    res.status(204).end()
+  } catch (err) { next(err) }
+}
+
 export async function listAgents(_req: Request, res: Response, next: NextFunction) {
   try {
     const agents = await prisma.user.findMany({
       where: { role: 'AGENT', is_active: true },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, online_status: true },
       orderBy: { name: 'asc' },
     })
     res.json(agents)
@@ -49,7 +92,8 @@ export async function listAgents(_req: Request, res: Response, next: NextFunctio
 export async function listUsers(_req: Request, res: Response, next: NextFunction) {
   try {
     const users = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, is_active: true, createdAt: true },
+      where: { id: { not: 'ai-system-agent' } },
+      select: { id: true, name: true, email: true, role: true, is_active: true, online_status: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     })
     res.json(users)

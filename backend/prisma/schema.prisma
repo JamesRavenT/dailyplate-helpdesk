@@ -47,19 +47,27 @@ enum SenderType {
   AI
 }
 
+enum AgentStatus {
+  ONLINE
+  AWAY
+  MEETING
+  OFFLINE
+}
+
 model User {
-  id            String    @id
+  id            String      @id
   name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String      @unique
+  emailVerified Boolean     @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  role          Role      @default(AGENT)
-  is_active     Boolean   @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  role          Role        @default(AGENT)
+  is_active     Boolean     @default(true)
+  online_status AgentStatus @default(OFFLINE)
   sessions      Session[]
   accounts      Account[]
-  tickets       Ticket[]  @relation("AssignedTickets")
+  tickets       Ticket[]    @relation("AssignedTickets")
 
   @@map("user")
 }

@@ -11,6 +11,7 @@ export const auth = betterAuth({
     additionalFields: {
       role: { type: 'string', required: false, defaultValue: 'AGENT', input: false },
       is_active: { type: 'boolean', required: false, defaultValue: true, input: false },
+      online_status: { type: 'string', required: false, defaultValue: 'OFFLINE', input: false },
     },
   },
   session: {

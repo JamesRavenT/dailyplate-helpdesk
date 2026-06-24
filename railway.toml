@@ -1,0 +1,12 @@
+# Railway deploy config — single service built from the root Dockerfile.
+# Add a Postgres database in the Railway project and set the env vars listed in DEPLOY.md.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3

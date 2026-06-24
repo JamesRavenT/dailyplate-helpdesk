@@ -229,14 +229,16 @@ function StatCard({
   label,
   value,
   iconClass,
+  accent,
 }: {
   icon: React.ElementType
   label: string
   value: number
   iconClass: string
+  accent: string
 }) {
   return (
-    <Card>
+    <Card className={`ring-0 border border-border border-l-4 ${accent}`}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
@@ -349,11 +351,11 @@ function AdminDashboard() {
     : []
 
   const statCards = [
-    { icon: Ticket,        label: 'Total Tickets',      value: stats?.total            ?? 0, iconClass: 'bg-blue-100 text-blue-600'    },
-    { icon: Clock,         label: 'Ongoing Tickets',    value: stats?.ongoing          ?? 0, iconClass: 'bg-amber-100 text-amber-600'  },
-    { icon: Brain,         label: 'Resolved by AI',     value: stats?.resolvedByAI     ?? 0, iconClass: 'bg-purple-100 text-purple-600' },
-    { icon: CheckCircle2,  label: 'Resolved by Agents', value: stats?.resolvedByAgents ?? 0, iconClass: 'bg-green-100 text-green-600'  },
-    { icon: AlertTriangle, label: 'Critical Tickets',   value: stats?.critical         ?? 0, iconClass: 'bg-red-100 text-red-600'      },
+    { icon: Ticket,        label: 'Total Tickets',      value: stats?.total            ?? 0, iconClass: 'bg-blue-100 text-blue-600',    accent: 'border-l-cyan-500'    },
+    { icon: Clock,         label: 'Ongoing Tickets',    value: stats?.ongoing          ?? 0, iconClass: 'bg-amber-100 text-amber-600',  accent: 'border-l-amber-500'   },
+    { icon: Brain,         label: 'Resolved by AI',     value: stats?.resolvedByAI     ?? 0, iconClass: 'bg-purple-100 text-purple-600', accent: 'border-l-purple-500'  },
+    { icon: CheckCircle2,  label: 'Resolved by Agents', value: stats?.resolvedByAgents ?? 0, iconClass: 'bg-green-100 text-green-600',  accent: 'border-l-emerald-500' },
+    { icon: AlertTriangle, label: 'Critical Tickets',   value: stats?.critical         ?? 0, iconClass: 'bg-red-100 text-red-600',      accent: 'border-l-red-500'     },
   ]
 
   return (
@@ -461,10 +463,10 @@ function AgentDashboard({ userId }: { userId: string }) {
     : []
 
   const statCards = [
-    { icon: Ticket,       label: 'Total Tickets',          value: statsData?.total          ?? 0, iconClass: 'bg-blue-100 text-blue-600'   },
-    { icon: Inbox,        label: 'New Tickets',             value: statsData?.new            ?? 0, iconClass: 'bg-indigo-100 text-indigo-600' },
-    { icon: Clock,        label: 'Ongoing Tickets',         value: statsData?.ongoing        ?? 0, iconClass: 'bg-amber-100 text-amber-600' },
-    { icon: CheckCircle2, label: 'Resolved / Closed',       value: statsData?.resolvedClosed ?? 0, iconClass: 'bg-green-100 text-green-600' },
+    { icon: Ticket,       label: 'Total Tickets',    value: statsData?.total          ?? 0, iconClass: 'bg-blue-100 text-blue-600',    accent: 'border-l-cyan-500'    },
+    { icon: Inbox,        label: 'New Tickets',       value: statsData?.new            ?? 0, iconClass: 'bg-indigo-100 text-indigo-600', accent: 'border-l-indigo-500'  },
+    { icon: Clock,        label: 'Ongoing Tickets',   value: statsData?.ongoing        ?? 0, iconClass: 'bg-amber-100 text-amber-600',  accent: 'border-l-amber-500'   },
+    { icon: CheckCircle2, label: 'Resolved / Closed', value: statsData?.resolvedClosed ?? 0, iconClass: 'bg-green-100 text-green-600',  accent: 'border-l-emerald-500' },
   ]
 
   return (
@@ -554,7 +556,7 @@ export default function Home() {
   const userId = user?.id ?? ''
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-100">
       <Navbar />
       <main className="max-w-5xl mx-auto px-6 py-10">
         <div className="mb-8">

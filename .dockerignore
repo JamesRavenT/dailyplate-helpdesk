@@ -1,0 +1,28 @@
+# Keep secrets and local cruft out of the build context / image
+**/node_modules
+**/.env
+**/.env.*
+**/dist
+**/.vite
+**/*.tsbuildinfo
+
+# VCS / IDE / docs
+.git
+.github
+.vscode
+.idea
+.agents
+.claude
+**/*.md
+
+# Tests & reports (not needed at runtime)
+e2e
+**/*.test.ts
+**/*.test.tsx
+**/test-results
+**/playwright-report
+**/.auth
+
+# Misc
+*.png
+docker-compose.yml

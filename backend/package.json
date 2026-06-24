@@ -8,6 +8,7 @@
     "prisma": "bun node_modules/prisma/build/index.js",
     "prisma:generate": "bun node_modules/prisma/build/index.js generate",
     "prisma:migrate": "bun node_modules/prisma/build/index.js migrate dev",
+    "prisma:deploy": "bun node_modules/prisma/build/index.js migrate deploy",
     "prisma:seed": "bun node_modules/prisma/build/index.js db seed",
     "prisma:studio": "bun node_modules/prisma/build/index.js studio"
   },

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { authClient } from '../lib/auth-client'
 
@@ -17,12 +17,30 @@ const SELECTABLE: AgentStatus[] = ['ONLINE', 'AWAY', 'MEETING']
 export default function Navbar() {
   const { data: session } = authClient.useSession()
   const navigate = useNavigate()
+  const location = useLocation()
   const isAdmin = (session?.user as any)?.role === 'ADMIN'
   const sessionStatus = (session?.user as any)?.online_status as AgentStatus | undefined
 
   const [status, setStatus] = useState<AgentStatus>('OFFLINE')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [newCount, setNewCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // Poll for new tickets assigned to this agent
+  useEffect(() => {
+    if (isAdmin || !session) return
+
+    async function fetchCount() {
+      try {
+        const { data } = await axios.get<{ new: number }>('/api/tickets/stats')
+        setNewCount(data.new ?? 0)
+      } catch {}
+    }
+
+    fetchCount()
+    const id = setInterval(fetchCount, 30_000)
+    return () => clearInterval(id)
+  }, [session?.user?.id, isAdmin])
 
   // Sync from session; auto-set ONLINE when logged in as agent
   useEffect(() => {
@@ -63,44 +81,57 @@ export default function Navbar() {
 
   const cfg = STATUS_CONFIG[status]
 
+  function linkClass(path: string, exact = false) {
+    const isActive = exact ? location.pathname === path : location.pathname.startsWith(path)
+    return `text-sm transition-colors pb-0.5 ${
+      isActive
+        ? 'text-white border-b-2 border-cyan-500'
+        : 'text-slate-400 hover:text-slate-100'
+    }`
+  }
+
   return (
-    <nav className="border-b bg-white px-6 py-3 flex items-center justify-between">
-      <div className="flex items-center gap-6">
-        <span className="font-semibold text-gray-800">Helpdesk</span>
-        <Link
-          to="/"
-          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-        >
+    <nav className="bg-[#0f172a] px-6 py-3.5 flex items-center justify-between">
+      <div className="flex items-center gap-7">
+        <span className="font-semibold text-white tracking-tight">Helpdesk</span>
+
+        <Link to="/" className={linkClass('/', true)}>
           Dashboard
         </Link>
+
         <Link
           to="/tickets"
-          className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          className={`relative ${linkClass('/tickets')}`}
         >
           Tickets
+          {!isAdmin && newCount > 0 && (
+            <span className="absolute -top-1.5 -right-3 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            </span>
+          )}
         </Link>
+
         {isAdmin && (
-          <Link
-            to="/users"
-            className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-          >
+          <Link to="/users" className={linkClass('/users')}>
             Users
           </Link>
         )}
       </div>
+
       {session && (
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">{session.user.name}</span>
+          <span className="text-sm text-slate-400">{session.user.name}</span>
 
           {!isAdmin && (
             <div className="relative" ref={menuRef}>
               <button
                 onClick={() => setMenuOpen((o) => !o)}
-                className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
               >
                 <span className={`h-2 w-2 rounded-full ${cfg.dot}`} />
                 {cfg.label}
-                <svg className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-3 w-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -124,7 +155,7 @@ export default function Navbar() {
 
           <button
             onClick={handleSignOut}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
           >
             Sign Out
           </button>

@@ -1,4 +1,5 @@
 import './instrument.ts' // must be first — loads .env and initialises Sentry
+import path from 'path'
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
@@ -13,11 +14,27 @@ import { startBoss } from './lib/boss.ts'
 const app = express()
 const port = process.env.PORT ?? 3001
 
-app.use(helmet())
+// Behind Railway's proxy — trust the first hop so req.ip / rate-limit keys use the real client IP
+app.set('trust proxy', 1)
+
+// CSP is disabled because this server also serves the built SPA (with Sentry + bundled
+// assets); a misconfigured policy would silently break the deployed frontend. All other
+// Helmet headers stay on. To re-enable, pass a `contentSecurityPolicy` directives object.
+app.use(helmet({ contentSecurityPolicy: false }))
 
 app.use(cors({
   origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
   credentials: true,
+}))
+
+// Global API limiter (defence-in-depth; sign-in has its own stricter limiter below).
+// Disabled under test so the E2E/integration suites aren't throttled.
+app.use('/api', rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
 }))
 
 app.use('/api/auth/sign-in', rateLimit({
@@ -25,6 +42,7 @@ app.use('/api/auth/sign-in', rateLimit({
   max: process.env.NODE_ENV === 'production' ? 20 : 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
 }))
 
 // Must be before express.json() — Better Auth parses its own request bodies
@@ -41,6 +59,17 @@ app.get('/health', (_req, res) => {
 })
 
 app.use('/api', router)
+
+// Serve the built SPA (single-service deploy). The frontend's dist/ is copied to
+// ./public in the Docker image. API and health routes above always take precedence.
+if (process.env.NODE_ENV === 'production') {
+  const clientDir = path.resolve(import.meta.dir, '../public')
+  app.use(express.static(clientDir))
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health') return next()
+    res.sendFile(path.join(clientDir, 'index.html'))
+  })
+}
 
 // Sentry error handler must be after all routes and before any other error middleware
 Sentry.setupExpressErrorHandler(app)

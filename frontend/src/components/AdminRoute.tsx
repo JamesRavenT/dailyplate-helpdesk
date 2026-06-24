@@ -6,7 +6,7 @@ export default function AdminRoute({ children }: { children: React.ReactNode }) 
 
   if (isPending) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50">
+      <div className="flex h-screen items-center justify-center bg-slate-100">
         <div className="text-gray-400 text-sm">Loading...</div>
       </div>
     )

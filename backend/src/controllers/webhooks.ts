@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { Resend } from 'resend'
 import { prisma } from '../lib/prisma.ts'
-import { boss, PROCESS_QUEUE } from '../lib/boss.ts'
+import { boss, PROCESS_QUEUE } from '../lib/triage.ts'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
 

@@ -9,7 +9,7 @@ import { toNodeHandler } from 'better-auth/node'
 import { auth, trustedOrigins } from './lib/auth.ts'
 import { router } from './routes/index.ts'
 import { errorHandler } from './middleware/errorHandler.ts'
-import { startBoss } from './lib/boss.ts'
+import { startBoss } from './lib/triage.ts'
 
 const app = express()
 const port = process.env.PORT ?? 3001

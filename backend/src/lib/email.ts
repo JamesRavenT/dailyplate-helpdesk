@@ -1,7 +1,7 @@
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
-const FROM = `BizTest Support <${process.env.RESEND_FROM_EMAIL ?? 'support@biztest.help'}>`
+const FROM = `DailyPlate Support <${process.env.RESEND_FROM_EMAIL ?? 'support@dailyplate.help'}>`
 
 export async function sendReplyToCustomer(opts: {
   customerEmail: string

@@ -99,7 +99,7 @@ async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
     const { object } = await generateObject({
       model: openai('gpt-4.1-nano'),
       schema: processSchema,
-      system: `You are an AI support agent for BizTest. For each incoming ticket you must:
+      system: `You are an AI support agent for DailyPlate. For each incoming ticket you must:
 
 1. Extract the customer's real name.
 2. Classify it (category + priority).
@@ -132,7 +132,7 @@ When canResolve=true, write a complete reply in the reply field:
 - Open with "Dear [customer first name],"
 - Warm, empathetic, professional tone
 - Answer clearly and completely using only factual, general information
-- Close with "\\n\\nBest regards,\\nBizTest Support Team"
+- Close with "\\n\\nBest regards,\\nDailyPlate Support Team"
 
 When canResolve=false, set reply to an empty string "".
 

@@ -259,7 +259,10 @@ export async function setUserLock(req: Request, res: Response, next: NextFunctio
     const valid = await verifyPassword({ hash: adminAccount.password, password: adminPassword })
     if (!valid) return res.status(401).json({ error: 'Incorrect password' })
 
-    await prisma.user.update({ where: { id }, data: { is_active: !lock } })
+    await prisma.user.update({
+      where: { id },
+      data: { is_active: !lock, ...(lock && { online_status: 'OFFLINE' }) },
+    })
 
     if (lock) {
       await prisma.session.deleteMany({ where: { userId: id } })

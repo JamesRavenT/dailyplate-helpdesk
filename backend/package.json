@@ -11,7 +11,8 @@
     "prisma:deploy": "bun node_modules/prisma/build/index.js migrate deploy",
     "prisma:seed": "bun node_modules/prisma/build/index.js db seed",
     "prisma:studio": "bun node_modules/prisma/build/index.js studio",
-    "seed:tickets": "bun run prisma/seedTickets.ts"
+    "seed:tickets": "bun run prisma/seedTickets.ts",
+    "fire:webhooks": "bun run prisma/fireWebhooks.ts"
   },
   "prisma": {
     "seed": "bun run prisma/seed.ts"

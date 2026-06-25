@@ -9,7 +9,7 @@ type AgentStatus = 'ONLINE' | 'AWAY' | 'MEETING' | 'OFFLINE'
 const STATUS_CONFIG: Record<AgentStatus, { label: string; dot: string }> = {
   ONLINE:  { label: 'Online',  dot: 'bg-green-500' },
   AWAY:    { label: 'Away',    dot: 'bg-yellow-400' },
-  MEETING: { label: 'Meeting', dot: 'bg-red-500' },
+  MEETING: { label: 'Busy',    dot: 'bg-red-500' },
   OFFLINE: { label: 'Offline', dot: 'bg-gray-400' },
 }
 
@@ -36,6 +36,7 @@ export default function Navbar() {
     },
     enabled: !isAdmin && !!session,
     refetchInterval: 30_000,
+    staleTime: 0,
   })
 
   const newCount = statsData?.new ?? 0

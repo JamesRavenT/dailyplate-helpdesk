@@ -106,7 +106,12 @@ export default function TicketDetail() {
     queryKey: ['tickets', id],
     queryFn: () => fetchTicket(id!),
     enabled: !!id,
+    meta: { onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tickets', 'stats'] }) },
   })
+
+  useEffect(() => {
+    if (ticket) queryClient.invalidateQueries({ queryKey: ['tickets', 'stats'] })
+  }, [ticket?.id, ticket?.status]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: agents = [] } = useQuery({
     queryKey: ['agents'],

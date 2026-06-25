@@ -9,6 +9,11 @@ const changeOwnPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 })
 
+const updateOwnProfileSchema = z.object({
+  name:  z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Enter a valid email'),
+})
+
 const deleteUserSchema = z.object({
   adminPassword: z.string().min(1, 'Password is required'),
 })
@@ -182,6 +187,24 @@ export async function changeOwnPassword(req: Request, res: Response, next: NextF
       data: { password: hashed },
     })
     res.json({ ok: true })
+  } catch (err) { next(err) }
+}
+
+export async function updateOwnProfile(req: Request, res: Response, next: NextFunction) {
+  try {
+    const parsed = updateOwnProfileSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message })
+    }
+    const { name, email } = parsed.data
+    const existing = await prisma.user.findFirst({ where: { email, id: { not: req.user!.id } } })
+    if (existing) return res.status(409).json({ error: 'Email already in use' })
+    const updated = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { name, email },
+      select: { id: true, name: true, email: true },
+    })
+    res.json(updated)
   } catch (err) { next(err) }
 }
 

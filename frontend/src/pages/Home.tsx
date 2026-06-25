@@ -300,7 +300,7 @@ const agentStatusDot: Record<string, string> = {
 const agentStatusLabel: Record<string, string> = {
   ONLINE:  'Online',
   AWAY:    'Away',
-  MEETING: 'In Meeting',
+  MEETING: 'Busy',
 }
 
 function OnlineAgentsList({ agents, isPending }: { agents: OnlineAgent[]; isPending: boolean }) {
@@ -562,35 +562,60 @@ function AgentDashboard({ userId }: { userId: string }) {
 function AgentSettingsModal({
   user,
   onClose,
+  onProfileUpdated,
 }: {
   user: { id: string; name: string; email: string }
   onClose: () => void
+  onProfileUpdated: (name: string, email: string) => void
 }) {
-  const [password, setPassword]       = useState('')
-  const [showPw, setShowPw]           = useState(false)
-  const [saving, setSaving]           = useState(false)
-  const [error, setError]             = useState<string | null>(null)
-  const [success, setSuccess]         = useState(false)
+  const [name,     setName]     = useState(user.name)
+  const [email,    setEmail]    = useState(user.email)
+  const [password, setPassword] = useState('')
+  const [showPw,   setShowPw]   = useState(false)
 
-  const handleSave = async () => {
-    setError(null)
-    setSuccess(false)
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters')
-      return
+  const [profileSaving,  setProfileSaving]  = useState(false)
+  const [profileError,   setProfileError]   = useState<string | null>(null)
+  const [profileSuccess, setProfileSuccess] = useState(false)
+
+  const [pwSaving,  setPwSaving]  = useState(false)
+  const [pwError,   setPwError]   = useState<string | null>(null)
+  const [pwSuccess, setPwSuccess] = useState(false)
+
+  const handleProfileSave = async () => {
+    setProfileError(null)
+    setProfileSuccess(false)
+    if (!name.trim() || name.trim().length < 2) { setProfileError('Name must be at least 2 characters'); return }
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setProfileError('Enter a valid email'); return }
+    setProfileSaving(true)
+    try {
+      const { data } = await axios.patch<{ name: string; email: string }>('/api/users/me/profile', { name: name.trim(), email: email.trim() })
+      setProfileSuccess(true)
+      onProfileUpdated(data.name, data.email)
+    } catch (err: any) {
+      setProfileError(err?.response?.data?.error ?? 'Failed to update profile')
+    } finally {
+      setProfileSaving(false)
     }
-    setSaving(true)
+  }
+
+  const handlePasswordSave = async () => {
+    setPwError(null)
+    setPwSuccess(false)
+    if (password.length < 8) { setPwError('Password must be at least 8 characters'); return }
+    setPwSaving(true)
     try {
       await axios.patch('/api/users/me', { password })
-      setSuccess(true)
+      setPwSuccess(true)
       setPassword('')
       setShowPw(false)
     } catch (err: any) {
-      setError(err?.response?.data?.error ?? 'Failed to update password')
+      setPwError(err?.response?.data?.error ?? 'Failed to update password')
     } finally {
-      setSaving(false)
+      setPwSaving(false)
     }
   }
+
+  const profileChanged = name.trim() !== user.name || email.trim() !== user.email
 
   return (
     <div
@@ -598,36 +623,54 @@ function AgentSettingsModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6"
+        className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 space-y-5"
         onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold text-gray-900">Settings</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="space-y-3 mb-5">
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Name</p>
-            <p className="text-sm font-medium text-gray-900">{user.name}</p>
+        {/* Profile */}
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Profile</p>
+          <div className="space-y-1.5">
+            <Label htmlFor="settings-name" className="text-sm text-gray-700">Name</Label>
+            <Input
+              id="settings-name"
+              value={name}
+              onChange={e => { setName(e.target.value); setProfileError(null); setProfileSuccess(false) }}
+            />
           </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-0.5">Email</p>
-            <p className="text-sm text-gray-700">{user.email}</p>
+          <div className="space-y-1.5">
+            <Label htmlFor="settings-email" className="text-sm text-gray-700">Email</Label>
+            <Input
+              id="settings-email"
+              type="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); setProfileError(null); setProfileSuccess(false) }}
+              autoComplete="off"
+            />
           </div>
+          {profileError   && <p className="text-xs text-red-600">{profileError}</p>}
+          {profileSuccess && <p className="text-xs text-green-600">Profile updated.</p>}
+          <Button className="w-full" onClick={handleProfileSave} disabled={profileSaving || !profileChanged}>
+            {profileSaving ? 'Saving…' : 'Save Profile'}
+          </Button>
         </div>
 
+        {/* Password */}
         <div className="border-t border-gray-100 pt-4 space-y-3">
-          <Label htmlFor="settings-pw" className="text-sm font-medium text-gray-700">Change Password</Label>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Change Password</p>
           <div className="relative">
             <Input
               id="settings-pw"
               type={showPw ? 'text' : 'password'}
               placeholder="New password (min 8 chars)"
               value={password}
-              onChange={e => { setPassword(e.target.value); setError(null); setSuccess(false) }}
+              onChange={e => { setPassword(e.target.value); setPwError(null); setPwSuccess(false) }}
               autoComplete="new-password"
             />
             <button
@@ -639,10 +682,10 @@ function AgentSettingsModal({
               {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {error   && <p className="text-xs text-red-600">{error}</p>}
-          {success && <p className="text-xs text-green-600">Password updated successfully.</p>}
-          <Button className="w-full" onClick={handleSave} disabled={saving || !password}>
-            {saving ? 'Saving…' : 'Update Password'}
+          {pwError   && <p className="text-xs text-red-600">{pwError}</p>}
+          {pwSuccess && <p className="text-xs text-green-600">Password updated.</p>}
+          <Button className="w-full" onClick={handlePasswordSave} disabled={pwSaving || !password}>
+            {pwSaving ? 'Saving…' : 'Update Password'}
           </Button>
         </div>
       </div>
@@ -658,6 +701,11 @@ export default function Home() {
   const isAdmin = user?.role === 'ADMIN'
   const userId = user?.id ?? ''
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [displayName,  setDisplayName]  = useState<string | null>(null)
+  const [displayEmail, setDisplayEmail] = useState<string | null>(null)
+
+  const shownName  = displayName  ?? user?.name  ?? ''
+  const shownEmail = displayEmail ?? user?.email ?? ''
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -666,9 +714,9 @@ export default function Home() {
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back, {session?.user.name}
+              Welcome back, {shownName}
             </h1>
-            <p className="mt-1 text-sm text-gray-500">{session?.user.email}</p>
+            <p className="mt-1 text-sm text-gray-500">{shownEmail}</p>
           </div>
           {!isAdmin && (
             <button
@@ -696,8 +744,9 @@ export default function Home() {
 
       {settingsOpen && user && (
         <AgentSettingsModal
-          user={{ id: userId, name: user.name ?? '', email: user.email ?? '' }}
+          user={{ id: userId, name: shownName, email: shownEmail }}
           onClose={() => setSettingsOpen(false)}
+          onProfileUpdated={(name, email) => { setDisplayName(name); setDisplayEmail(email) }}
         />
       )}
     </div>

@@ -19,6 +19,11 @@ export async function sendReplyToCustomer(opts: {
     extraHeaders['References'] = emailThreadId
   }
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[email] dev mode — skipping send to ${customerEmail} (${replySubject})`)
+    return
+  }
+
   await resend.emails.send({
     from: FROM,
     to: customerEmail,

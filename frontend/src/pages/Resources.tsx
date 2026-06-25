@@ -27,7 +27,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
   ACCOUNT:   'Account',
   DELIVERY:  'Delivery',
   MENU:      'Menu',
-  PAYMENT:   'Payments & Refunds',
+  PAYMENT:   'Payments',
   TECHNICAL: 'Technical',
   VOUCHER:   'Vouchers',
   INQUIRY:   'General Inquiries',

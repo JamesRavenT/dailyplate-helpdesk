@@ -29,7 +29,7 @@ const CATEGORY_OPTIONS: { value: Category; label: string }[] = [
   { value: 'ACCOUNT',   label: 'Account' },
   { value: 'DELIVERY',  label: 'Delivery' },
   { value: 'MENU',      label: 'Menu' },
-  { value: 'PAYMENT',   label: 'Payments & Refunds' },
+  { value: 'PAYMENT',   label: 'Payments' },
   { value: 'TECHNICAL', label: 'Technical' },
   { value: 'VOUCHER',   label: 'Vouchers' },
   { value: 'INQUIRY',   label: 'General Inquiries' },

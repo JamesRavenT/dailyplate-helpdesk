@@ -77,13 +77,13 @@ const statusLabels: Record<TicketStatus, string> = {
 const senderStyles: Record<SenderType, { bubble: string; label: string; align: string }> = {
   CUSTOMER: { bubble: 'bg-white border border-slate-200 text-gray-800', label: 'Customer', align: 'items-start' },
   AGENT:    { bubble: 'bg-blue-600 text-white',                         label: 'Agent',    align: 'items-end'   },
-  AI:       { bubble: 'bg-purple-100 text-purple-800',                  label: 'AI',       align: 'items-start' },
+  AI:       { bubble: 'bg-purple-600 text-white',                        label: 'AI',       align: 'items-end'   },
 }
 
 const categoryLabels: Record<TicketCategory, string> = {
   ACCOUNT:   'Account',
   INQUIRY:   'Inquiry',
-  PAYMENT:   'Payments & Refunds',
+  PAYMENT:   'Payments',
   DELIVERY:  'Delivery',
   MENU:      'Menu',
   TECHNICAL: 'Technical',
@@ -437,7 +437,7 @@ export default function TicketDetail() {
                   <option value="">None</option>
                   <option value="ACCOUNT">Account</option>
                   <option value="INQUIRY">Inquiry</option>
-                  <option value="PAYMENT">Payments &amp; Refunds</option>
+                  <option value="PAYMENT">Payments</option>
                   <option value="DELIVERY">Delivery</option>
                   <option value="MENU">Menu</option>
                   <option value="TECHNICAL">Technical</option>

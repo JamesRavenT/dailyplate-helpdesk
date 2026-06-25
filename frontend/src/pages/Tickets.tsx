@@ -78,7 +78,7 @@ const statusDotClass: Record<TicketStatus, string> = {
 const categoryLabels: Record<Category, string> = {
   ACCOUNT: 'Account',
   INQUIRY: 'Inquiry',
-  PAYMENT:  'Payments & Refunds',
+  PAYMENT:  'Payments',
   DELIVERY: 'Delivery',
   MENU:     'Menu',
   TECHNICAL: 'Technical',

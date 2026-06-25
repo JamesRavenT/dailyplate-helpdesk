@@ -85,7 +85,7 @@ export async function updateAgentStatus(req: Request, res: Response, next: NextF
 export async function listAgents(_req: Request, res: Response, next: NextFunction) {
   try {
     const agents = await prisma.user.findMany({
-      where: { role: 'AGENT', is_active: true },
+      where: { role: 'AGENT', is_active: true, id: { not: 'ai-system-agent' } },
       select: { id: true, name: true, email: true, online_status: true },
       orderBy: { name: 'asc' },
     })

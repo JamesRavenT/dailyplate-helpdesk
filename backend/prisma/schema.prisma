@@ -65,6 +65,7 @@ model User {
   role          Role        @default(AGENT)
   is_active     Boolean     @default(true)
   online_status AgentStatus @default(OFFLINE)
+  last_seen     DateTime?
   sessions      Session[]
   accounts      Account[]
   tickets       Ticket[]    @relation("AssignedTickets")

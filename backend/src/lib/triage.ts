@@ -9,7 +9,30 @@ import { sendReplyToCustomer } from './email.ts'
 export const boss = new PgBoss(process.env.DATABASE_URL!)
 
 export const PROCESS_QUEUE = 'process-ticket'
+export const PRESENCE_SWEEP_QUEUE = 'agent-presence-sweep'
 export const AI_AGENT_ID = 'ai-system-agent'
+
+// An agent whose last_seen is older than this is treated as disconnected (closed tab,
+// crash, sleep, lost network) and swept to OFFLINE. Agents poll every 30s, so 2 min
+// leaves comfortable margin for missed beats.
+const PRESENCE_TIMEOUT_MS = 2 * 60 * 1000
+
+// Flip agents who haven't been seen recently to OFFLINE. Writing to the DB (rather than
+// computing presence at read time) means ticket routing in findNextAgent() also stops
+// assigning to ghosts, and every consumer of online_status stays correct.
+async function sweepStaleAgents() {
+  const cutoff = new Date(Date.now() - PRESENCE_TIMEOUT_MS)
+  const { count } = await prisma.user.updateMany({
+    where: {
+      role: 'AGENT',
+      id: { not: AI_AGENT_ID },
+      online_status: { not: 'OFFLINE' },
+      last_seen: { lt: cutoff },
+    },
+    data: { online_status: 'OFFLINE' },
+  })
+  if (count > 0) console.log(`[presence] swept ${count} stale agent(s) → OFFLINE`)
+}
 
 async function ensureAiUser() {
   await prisma.user.upsert({
@@ -237,5 +260,10 @@ export async function startBoss() {
   await boss.createQueue(PROCESS_QUEUE)
   await boss.work<ProcessJobData>(PROCESS_QUEUE, { batchSize: 5 }, handleProcessJobs)
 
-  console.log('[boss] started — process-ticket worker registered')
+  // Presence sweeper: every minute, mark agents idle past the timeout as OFFLINE.
+  await boss.createQueue(PRESENCE_SWEEP_QUEUE)
+  await boss.work(PRESENCE_SWEEP_QUEUE, async () => { await sweepStaleAgents() })
+  await boss.schedule(PRESENCE_SWEEP_QUEUE, '* * * * *')
+
+  console.log('[boss] started — process-ticket worker + presence sweeper registered')
 }

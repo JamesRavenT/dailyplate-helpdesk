@@ -330,6 +330,9 @@ function AdminDashboard() {
       const { data } = await axios.get('/api/tickets/stats')
       return data
     },
+    // Keep the online-agent tags (and stat cards) live without a manual refresh.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const { data: chart, isPending: chartPending } = useQuery<AdminChartData>({

@@ -104,6 +104,32 @@ apiTest.describe('inbound email webhook', () => {
     apiExpect(body.ticket_id).toBe(originalId)
   })
 
+  apiTest('appends to the thread when only References (not in_reply_to) holds the root', async ({ request }) => {
+    // Regression: after an agent replies, the customer's next reply points In-Reply-To at
+    // the agent's message (unknown to us). The original thread root only survives in the
+    // References chain, so matching must consider it or a duplicate ticket is created.
+    const { res: firstRes, messageId: rootId } = await createTicketViaWebhook(request)
+    const { ticket_id: originalId } = await firstRes.json()
+
+    const agentReplyId = uniqueMessageId()
+    const replyRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: {
+        from_email: 'alice@example.com',
+        subject: 'Re: Help with my account',
+        body: 'Replying to your answer.',
+        message_id: uniqueMessageId(),
+        in_reply_to: agentReplyId,
+        references: `${rootId} ${agentReplyId}`,
+      },
+    })
+
+    apiExpect(replyRes.status()).toBe(200)
+    const body = await replyRes.json()
+    apiExpect(body.action).toBe('message_added')
+    apiExpect(body.ticket_id).toBe(originalId)
+  })
+
   apiTest('creates a new ticket when in_reply_to matches nothing', async ({ request }) => {
     const res = await request.post(WEBHOOK_URL, {
       headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },

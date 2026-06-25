@@ -9,6 +9,27 @@ const resend = new Resend(process.env.RESEND_API_KEY!)
 
 // ─── shared ticket-creation / thread-continuation logic ───────────────────────
 
+// Pull every Message-ID out of In-Reply-To / References headers. A reply's In-Reply-To
+// points at the immediate parent (often the agent's outgoing email, not the original),
+// but References carries the full chain including the thread root we stored as
+// email_thread_id. Mail clients vary on angle brackets, so emit every form to match.
+function extractMessageIds(...headers: (string | undefined)[]): string[] {
+  const ids = new Set<string>()
+  for (const header of headers) {
+    if (!header) continue
+    const tokens = header.match(/<[^>]+>/g) ?? header.split(/\s+/)
+    for (const token of tokens) {
+      const raw = token.trim()
+      if (!raw) continue
+      const stripped = raw.replace(/^<|>$/g, '')
+      ids.add(raw)
+      ids.add(stripped)
+      ids.add(`<${stripped}>`)
+    }
+  }
+  return [...ids]
+}
+
 async function processInboundEmail(params: {
   from_email: string
   from_name?: string
@@ -16,13 +37,16 @@ async function processInboundEmail(params: {
   body: string
   message_id?: string
   in_reply_to?: string
+  references?: string
 }): Promise<{ ticket_id: string; action: 'ticket_created' | 'message_added' }> {
-  const { from_email, from_name, subject, body, message_id, in_reply_to } = params
+  const { from_email, from_name, subject, body, message_id, in_reply_to, references } = params
   const now = new Date()
 
-  if (in_reply_to) {
-    const existing = await prisma.ticket.findUnique({
-      where: { email_thread_id: in_reply_to },
+  const threadCandidates = extractMessageIds(in_reply_to, references)
+  if (threadCandidates.length > 0) {
+    const existing = await prisma.ticket.findFirst({
+      where: { email_thread_id: { in: threadCandidates } },
+      orderBy: { created_at: 'desc' },
     })
     if (existing) {
       const wasAiResolved = existing.status === 'AI_RESOLVED'
@@ -81,6 +105,7 @@ const inboundEmailSchema = z.object({
   body: z.string().min(1, 'Body is required').max(100_000),
   message_id: z.string().max(500).optional(),
   in_reply_to: z.string().max(500).optional(),
+  references: z.string().max(10_000).optional(),
 })
 
 export async function inboundEmail(req: Request, res: Response, next: NextFunction) {
@@ -166,6 +191,7 @@ export async function resendInboundEmail(req: Request, res: Response, next: Next
       emailHeaders[k.toLowerCase()] = v
     }
     const inReplyTo = emailHeaders['in-reply-to']
+    const references = emailHeaders['references']
     const messageId = event.data.message_id ?? emailHeaders['message-id']
 
     const { email: fromEmail, name: fromName } = parseFrom(event.data.from)
@@ -177,6 +203,7 @@ export async function resendInboundEmail(req: Request, res: Response, next: Next
       body,
       message_id: messageId,
       in_reply_to: inReplyTo,
+      references,
     })
 
     return res.status(200).json(result)

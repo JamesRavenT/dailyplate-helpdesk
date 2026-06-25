@@ -16,6 +16,9 @@ import Navbar from '../components/Navbar'
 import { authClient } from '../lib/auth-client'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Skeleton } from '../components/ui/skeleton'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { getRecentViewIds } from '../lib/recentViews'
 import {
   Ticket,
@@ -26,6 +29,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Inbox,
+  Settings,
+  Eye,
+  EyeOff,
+  X,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -550,23 +557,128 @@ function AgentDashboard({ userId }: { userId: string }) {
   )
 }
 
+// ─── Agent settings modal ─────────────────────────────────────────────────────
+
+function AgentSettingsModal({
+  user,
+  onClose,
+}: {
+  user: { id: string; name: string; email: string }
+  onClose: () => void
+}) {
+  const [password, setPassword]       = useState('')
+  const [showPw, setShowPw]           = useState(false)
+  const [saving, setSaving]           = useState(false)
+  const [error, setError]             = useState<string | null>(null)
+  const [success, setSuccess]         = useState(false)
+
+  const handleSave = async () => {
+    setError(null)
+    setSuccess(false)
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    setSaving(true)
+    try {
+      await axios.patch('/api/users/me', { password })
+      setSuccess(true)
+      setPassword('')
+      setShowPw(false)
+    } catch (err: any) {
+      setError(err?.response?.data?.error ?? 'Failed to update password')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-gray-900">Settings</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3 mb-5">
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">Name</p>
+            <p className="text-sm font-medium text-gray-900">{user.name}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">Email</p>
+            <p className="text-sm text-gray-700">{user.email}</p>
+          </div>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4 space-y-3">
+          <Label htmlFor="settings-pw" className="text-sm font-medium text-gray-700">Change Password</Label>
+          <div className="relative">
+            <Input
+              id="settings-pw"
+              type={showPw ? 'text' : 'password'}
+              placeholder="New password (min 8 chars)"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(null); setSuccess(false) }}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPw(v => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              tabIndex={-1}
+            >
+              {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {error   && <p className="text-xs text-red-600">{error}</p>}
+          {success && <p className="text-xs text-green-600">Password updated successfully.</p>}
+          <Button className="w-full" onClick={handleSave} disabled={saving || !password}>
+            {saving ? 'Saving…' : 'Update Password'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const { data: session, isPending: sessionPending } = authClient.useSession()
-  const user = session?.user as { role?: string; id?: string } | undefined
+  const user = session?.user as { role?: string; id?: string; name?: string; email?: string } | undefined
   const isAdmin = user?.role === 'ADMIN'
   const userId = user?.id ?? ''
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   return (
     <div className="min-h-screen bg-slate-100">
       <Navbar />
       <main className="max-w-5xl mx-auto px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Welcome back, {session?.user.name}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">{session?.user.email}</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Welcome back, {session?.user.name}
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">{session?.user.email}</p>
+          </div>
+          {!isAdmin && (
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </button>
+          )}
         </div>
 
         {sessionPending ? (
@@ -581,6 +693,13 @@ export default function Home() {
           <AgentDashboard userId={userId} />
         )}
       </main>
+
+      {settingsOpen && user && (
+        <AgentSettingsModal
+          user={{ id: userId, name: user.name ?? '', email: user.email ?? '' }}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   )
 }

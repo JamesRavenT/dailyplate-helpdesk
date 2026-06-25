@@ -5,6 +5,10 @@ import { hashPassword, verifyPassword } from 'better-auth/crypto'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.ts'
 
+const changeOwnPasswordSchema = z.object({
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+})
+
 const deleteUserSchema = z.object({
   adminPassword: z.string().min(1, 'Password is required'),
 })
@@ -163,6 +167,21 @@ export async function updateUser(req: Request, res: Response, next: NextFunction
       select: { id: true, name: true, email: true, role: true, is_active: true, createdAt: true },
     })
     res.json(updated)
+  } catch (err) { next(err) }
+}
+
+export async function changeOwnPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const parsed = changeOwnPasswordSchema.safeParse(req.body)
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0].message })
+    }
+    const hashed = await hashPassword(parsed.data.password)
+    await prisma.account.updateMany({
+      where: { userId: req.user!.id, providerId: 'credential' },
+      data: { password: hashed },
+    })
+    res.json({ ok: true })
   } catch (err) { next(err) }
 }
 

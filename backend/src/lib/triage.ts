@@ -71,13 +71,13 @@ async function findNextAgent(): Promise<string | null> {
     update: {},
   })
 
-  // Only agents that are ONLINE or AWAY are "on queue"
+  // Only ONLINE agents receive new tickets; AWAY / MEETING / OFFLINE are excluded.
   const agents = await prisma.user.findMany({
     where: {
       role: 'AGENT',
       is_active: true,
       id: { not: AI_AGENT_ID },
-      online_status: { in: ['ONLINE', 'AWAY'] },
+      online_status: 'ONLINE',
     },
     select: { id: true },
     orderBy: { id: 'asc' },

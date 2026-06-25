@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import { requireAuth, requireAdmin } from '../middleware/auth.ts'
-import { listAgents, listUsers, createUser, updateUser, deleteUser, setUserLock, updateAgentStatus } from '../controllers/users.ts'
+import { listAgents, listUsers, createUser, updateUser, deleteUser, setUserLock, updateAgentStatus, changeOwnPassword } from '../controllers/users.ts'
 
 export const usersRouter = Router()
 usersRouter.patch('/status', requireAuth, updateAgentStatus)
+usersRouter.patch('/me', requireAuth, changeOwnPassword)
 usersRouter.get('/agents', requireAdmin, listAgents)
 usersRouter.get('/', requireAdmin, listUsers)
 usersRouter.post('/', requireAdmin, createUser)

@@ -1,9 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import axios, { type AxiosError } from 'axios'
+import { Eye, EyeOff } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ type Props = {
 
 export default function CreateUserDialog({ open, onOpenChange }: Props) {
   const queryClient = useQueryClient()
+  const [showPassword, setShowPassword] = useState(false)
 
   const {
     register,
@@ -52,6 +54,7 @@ export default function CreateUserDialog({ open, onOpenChange }: Props) {
     if (!open) {
       reset()
       mutation.reset()
+      setShowPassword(false)
     }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -94,14 +97,24 @@ export default function CreateUserDialog({ open, onOpenChange }: Props) {
 
           <div className="space-y-1.5">
             <Label htmlFor="cu-password">Password</Label>
-            <Input
-              id="cu-password"
-              type="password"
-              placeholder="••••••••"
-              autoComplete="new-password"
-              aria-invalid={!!errors.password || undefined}
-              {...register('password')}
-            />
+            <div className="relative">
+              <Input
+                id="cu-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                aria-invalid={!!errors.password || undefined}
+                {...register('password')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(v => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
             {errors.password && (
               <p className="text-xs text-destructive">{errors.password.message}</p>
             )}

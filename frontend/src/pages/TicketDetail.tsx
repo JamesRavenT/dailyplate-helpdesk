@@ -11,7 +11,7 @@ import { authClient } from '../lib/auth-client'
 
 type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'AI_PROCESSING' | 'AI_RESOLVED'
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
-type TicketCategory = 'ACCOUNT' | 'INQUIRY' | 'REFUND' | 'TECHNICAL' | 'VOUCHER' | 'OTHER'
+type TicketCategory = 'ACCOUNT' | 'INQUIRY' | 'PAYMENT' | 'TECHNICAL' | 'VOUCHER' | 'OTHER' | 'DELIVERY' | 'MENU'
 type SenderType = 'CUSTOMER' | 'AGENT' | 'AI'
 
 type Agent = { id: string; name: string; email: string }
@@ -83,7 +83,9 @@ const senderStyles: Record<SenderType, { bubble: string; label: string; align: s
 const categoryLabels: Record<TicketCategory, string> = {
   ACCOUNT:   'Account',
   INQUIRY:   'Inquiry',
-  REFUND:    'Refunds',
+  PAYMENT:   'Payments & Refunds',
+  DELIVERY:  'Delivery',
+  MENU:      'Menu',
   TECHNICAL: 'Technical',
   VOUCHER:   'Voucher',
   OTHER:     'Others',
@@ -437,7 +439,9 @@ export default function TicketDetail() {
                   <option value="">None</option>
                   <option value="ACCOUNT">Account</option>
                   <option value="INQUIRY">Inquiry</option>
-                  <option value="REFUND">Refunds</option>
+                  <option value="PAYMENT">Payments &amp; Refunds</option>
+                  <option value="DELIVERY">Delivery</option>
+                  <option value="MENU">Menu</option>
                   <option value="TECHNICAL">Technical</option>
                   <option value="VOUCHER">Voucher</option>
                   <option value="OTHER">Others</option>

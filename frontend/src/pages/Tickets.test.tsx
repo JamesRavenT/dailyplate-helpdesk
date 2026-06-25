@@ -36,7 +36,7 @@ const mockTicketsResponse = {
       customer_email: 'bob@example.com',
       status: 'IN_PROGRESS' as const,
       priority: 'LOW' as const,
-      category: 'REFUND' as const,
+      category: 'PAYMENT' as const,
       created_at: '2024-01-14T09:00:00.000Z',
       assigned_to: { id: 'agent-1', name: 'Agent One', email: 'agent1@example.com' },
     },

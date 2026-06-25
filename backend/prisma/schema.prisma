@@ -23,10 +23,12 @@ enum TicketStatus {
 enum TicketCategory {
   ACCOUNT
   INQUIRY
-  REFUND
+  PAYMENT
   TECHNICAL
   VOUCHER
   OTHER
+  DELIVERY
+  MENU
 }
 
 enum Priority {
@@ -148,6 +150,15 @@ model Message {
   body        String
   sender_type SenderType
   sent_at     DateTime   @default(now())
+}
+
+model Article {
+  id        String         @id @default(cuid())
+  title     String
+  content   String
+  category  TicketCategory
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 }
 
 model KnowledgeBaseFile {

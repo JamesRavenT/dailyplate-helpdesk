@@ -112,6 +112,10 @@ export default function Navbar() {
           )}
         </Link>
 
+        <Link to="/resources" className={linkClass('/resources')}>
+          Resources
+        </Link>
+
         {isAdmin && (
           <Link to="/users" className={linkClass('/users')}>
             Users

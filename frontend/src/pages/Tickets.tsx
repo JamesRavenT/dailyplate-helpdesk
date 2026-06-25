@@ -16,7 +16,7 @@ import { authClient } from '../lib/auth-client'
 
 type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'AI_PROCESSING' | 'AI_RESOLVED'
 type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
-type Category = 'ACCOUNT' | 'INQUIRY' | 'REFUND' | 'TECHNICAL' | 'VOUCHER' | 'OTHER'
+type Category = 'ACCOUNT' | 'INQUIRY' | 'PAYMENT' | 'TECHNICAL' | 'VOUCHER' | 'OTHER' | 'DELIVERY' | 'MENU'
 
 type TicketListItem = {
   id: string
@@ -78,7 +78,9 @@ const statusDotClass: Record<TicketStatus, string> = {
 const categoryLabels: Record<Category, string> = {
   ACCOUNT: 'Account',
   INQUIRY: 'Inquiry',
-  REFUND: 'Refunds',
+  PAYMENT:  'Payments & Refunds',
+  DELIVERY: 'Delivery',
+  MENU:     'Menu',
   TECHNICAL: 'Technical',
   VOUCHER: 'Voucher',
   OTHER: 'Others',

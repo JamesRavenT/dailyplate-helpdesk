@@ -58,7 +58,7 @@ export type ProcessJobData = {
 
 const processSchema = z.object({
   customerName: z.string(),
-  category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']),
+  category: z.enum(['ACCOUNT', 'INQUIRY', 'PAYMENT', 'TECHNICAL', 'VOUCHER', 'OTHER', 'DELIVERY', 'MENU']),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   canResolve: z.boolean(),
   reply: z.string(),
@@ -107,6 +107,13 @@ async function findNextAgent(): Promise<string | null> {
 }
 
 async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
+  // Fetch all SOP articles once per batch to inject into the AI prompt.
+  const allArticles = await prisma.article.findMany({ orderBy: { category: 'asc' } })
+  const articleContext = allArticles.length > 0
+    ? '\n\nKNOWLEDGE BASE — use the SOP below that matches the ticket category to draft accurate replies:\n\n' +
+      allArticles.map((a) => `## [${a.category}] ${a.title}\n${a.content}`).join('\n\n---\n\n')
+    : ''
+
   for (const job of jobs) {
     const { ticketId, subject, body } = job.data
     const now = new Date()
@@ -160,17 +167,21 @@ When canResolve=true, write a complete reply in the reply field:
 When canResolve=false, set reply to an empty string "".
 
 Categories:
-- ACCOUNT: login, account access, profile, password
-- INQUIRY: general questions, how-to, subscription/plan questions
-- REFUND: refund requests, billing disputes, charge reversals
-- TECHNICAL: bugs, crashes, integrations, features not working
-- VOUCHER: voucher/discount/promo codes
-- OTHER: anything else
+- ACCOUNT: login, account access, profile changes, password reset, subscription management
+- INQUIRY: general questions, how-to, plan/pricing information
+- PAYMENT: payment failures, declined cards, refund requests, billing disputes, charge reversals
+- TECHNICAL: bugs, crashes, can't save changes, features not working
+- VOUCHER: voucher codes, gift cards, promo/discount codes
+- DELIVERY: late delivery, missing delivery, wrong order delivered
+- MENU: menu questions, food selection, customisation, dietary options, meal planning
+- OTHER: anything that doesn't fit the above
 
 Priority:
-- HIGH: account locked, payment failure, data loss, service down
-- MEDIUM: billing confusion, degraded feature, inconvenient issue
-- LOW: general questions, minor issues, feature requests`,
+- HIGH: account locked, payment failure, missing delivery, data loss, service down
+- MEDIUM: late delivery, billing confusion, degraded feature, wrong order
+- LOW: general questions, menu inquiries, minor issues, feature requests
+
+When drafting a reply, follow the relevant SOP from the knowledge base exactly. If the SOP says to direct the customer to a URL, include it.${articleContext}`,
       prompt: `Customer email: ${customerEmail}
 Current name on file: ${rawName}
 Subject: ${subject}

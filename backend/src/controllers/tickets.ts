@@ -8,7 +8,7 @@ import { sendReplyToCustomer } from '../lib/email.ts'
 const listQuerySchema = z.object({
   sortBy: z.enum(['subject', 'customer_name', 'status', 'priority', 'category', 'created_at', 'last_updated_at', 'assigned_to']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).optional(),
+  category: z.enum(['ACCOUNT', 'INQUIRY', 'PAYMENT', 'TECHNICAL', 'VOUCHER', 'OTHER', 'DELIVERY', 'MENU']).optional(),
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'AI_RESOLVED']).optional(),
   search: z.string().max(200).optional(),
   page: z.string().optional(),
@@ -26,14 +26,14 @@ const polishReplySchema = z.object({
 const adminUpdateTicketSchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().optional(),
-  category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).nullable().optional(),
+  category: z.enum(['ACCOUNT', 'INQUIRY', 'PAYMENT', 'TECHNICAL', 'VOUCHER', 'OTHER', 'DELIVERY', 'MENU']).nullable().optional(),
   assigned_to_id: z.string().nullable().optional(),
 })
 
 const agentUpdateTicketSchema = z.object({
   status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).nullable().optional(),
-  category: z.enum(['ACCOUNT', 'INQUIRY', 'REFUND', 'TECHNICAL', 'VOUCHER', 'OTHER']).nullable().optional(),
+  category: z.enum(['ACCOUNT', 'INQUIRY', 'PAYMENT', 'TECHNICAL', 'VOUCHER', 'OTHER', 'DELIVERY', 'MENU']).nullable().optional(),
 })
 
 export async function listTickets(req: Request, res: Response, next: NextFunction) {

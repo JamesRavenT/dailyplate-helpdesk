@@ -186,7 +186,7 @@ describe('TicketDetail page', () => {
     renderWithQuery()
     await screen.findByRole('heading', { name: 'Cannot log in' })
 
-    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'REFUND' } })
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'PAYMENT' } })
     expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled()
   })
 

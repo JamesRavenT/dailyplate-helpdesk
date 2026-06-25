@@ -66,6 +66,7 @@ async function processInboundEmail(params: {
     })
     if (existing) {
       const wasAiResolved = existing.status === 'AI_RESOLVED'
+      const wasInProgress = existing.status === 'IN_PROGRESS'
       await prisma.$transaction([
         prisma.message.create({
           data: { ticket_id: existing.id, body, sender_type: 'CUSTOMER', sent_at: now },
@@ -76,7 +77,8 @@ async function processInboundEmail(params: {
             last_customer_reply_at: now,
             last_updated_at: now,
             summary: null,
-            ...(wasAiResolved && { status: 'OPEN', assigned_to_id: null }),
+            ...((wasAiResolved || wasInProgress) && { status: 'OPEN' }),
+            ...(wasAiResolved && { assigned_to_id: null }),
           },
         }),
       ])

@@ -155,6 +155,19 @@ export async function getTicket(req: Request, res: Response, next: NextFunction)
       return res.status(403).json({ error: 'Forbidden' })
     }
 
+    // Auto-advance OPEN → IN_PROGRESS the moment an agent opens the ticket
+    if (req.user!.role === 'AGENT' && ticket.status === 'OPEN') {
+      const updated = await prisma.ticket.update({
+        where: { id },
+        data: { status: 'IN_PROGRESS', last_updated_at: new Date() },
+        include: {
+          messages: { orderBy: { sent_at: 'asc' } },
+          assigned_to: { select: { id: true, name: true } },
+        },
+      })
+      return res.json(updated)
+    }
+
     res.json(ticket)
   } catch (err) { next(err) }
 }

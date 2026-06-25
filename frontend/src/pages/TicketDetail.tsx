@@ -75,9 +75,9 @@ const statusLabels: Record<TicketStatus, string> = {
 }
 
 const senderStyles: Record<SenderType, { bubble: string; label: string; align: string }> = {
-  CUSTOMER: { bubble: 'bg-gray-100 text-gray-800', label: 'Customer', align: 'items-start' },
-  AGENT:    { bubble: 'bg-blue-600 text-white',    label: 'Agent',    align: 'items-end'   },
-  AI:       { bubble: 'bg-purple-100 text-purple-800', label: 'AI',  align: 'items-start' },
+  CUSTOMER: { bubble: 'bg-white border border-slate-200 text-gray-800', label: 'Customer', align: 'items-start' },
+  AGENT:    { bubble: 'bg-blue-600 text-white',                         label: 'Agent',    align: 'items-end'   },
+  AI:       { bubble: 'bg-purple-100 text-purple-800',                  label: 'AI',       align: 'items-start' },
 }
 
 const categoryLabels: Record<TicketCategory, string> = {
@@ -214,9 +214,14 @@ export default function TicketDetail() {
   }
 
   const handleUpdate = () => {
+    const closingOrResolving = status === 'CLOSED' || status === 'RESOLVED'
+    if (closingOrResolving && !category) {
+      setUpdateError('A category is required before closing or resolving a ticket.')
+      return
+    }
     const body: PatchBody = {
       ...(status && { status }),
-      priority: (priority as Priority) || null,
+      priority: closingOrResolving ? null : (priority as Priority) || null,
       category: (category as TicketCategory) || null,
       assigned_to_id: assignedToId,
     }
@@ -296,7 +301,7 @@ export default function TicketDetail() {
                 <h2 className="text-sm font-medium text-gray-500 mb-3 uppercase tracking-wide">
                   Thread ({ticket.messages.length})
                 </h2>
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
                   {ticket.messages.length === 0 ? (
                     <p className="text-sm text-gray-400">No messages yet.</p>
                   ) : (

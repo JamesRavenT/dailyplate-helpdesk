@@ -213,8 +213,18 @@ export async function polishReply(req: Request, res: Response, next: NextFunctio
 
     const { text } = await generateText({
       model: openai('gpt-4.1-nano'),
-      system: `You are a professional helpdesk support agent assistant. Your job is to polish and improve draft replies written by support agents. Make replies clear, empathetic, professional, and concise. Keep the agent's core message and intent intact — only improve the tone, grammar, and clarity. Return only the improved reply text with no commentary or preamble.`,
-      prompt: `Ticket subject: ${ticket.subject}\n\nConversation so far:\n${thread || '(no messages yet)'}\n\nAgent's draft reply:\n${parsed.data.body}`,
+      system: `You are a professional helpdesk support agent assistant for DailyPlate, a meal-kit delivery company. Your job is to polish and improve draft replies written by support agents. Make replies clear, empathetic, professional, and concise. Keep the agent's core message and intent intact — only improve the tone, grammar, and clarity.
+
+Always format the reply exactly like this:
+1. Start with a warm greeting to the customer by first name: "Hi [First Name],"
+2. The polished reply body (one or more paragraphs).
+3. End with a sign-off on its own line:
+
+Warm regards,
+DailyPlate Support Team
+
+Return only the formatted reply with no commentary or preamble.`,
+      prompt: `Customer name: ${ticket.customer_name}\nTicket subject: ${ticket.subject}\n\nConversation so far:\n${thread || '(no messages yet)'}\n\nAgent's draft reply:\n${parsed.data.body}`,
     })
 
     res.json({ polished: text })

@@ -30,6 +30,21 @@ function extractMessageIds(...headers: (string | undefined)[]): string[] {
   return [...ids]
 }
 
+// Strip RFC-style quoted text from email replies so only the new content is stored.
+function stripEmailQuotes(raw: string): string {
+  const lines = raw.split('\n')
+  const result: string[] = []
+  for (const line of lines) {
+    const trimmed = line.trimStart()
+    if (trimmed.startsWith('>')) break
+    if (/^On .{0,300}wrote:\s*$/i.test(trimmed)) break
+    if (/^-{4,}[\s\w]*(original|forwarded)[\s\w]*message[\s\w]*-{4,}/i.test(trimmed)) break
+    result.push(line)
+  }
+  while (result.length > 0 && result[result.length - 1].trim() === '') result.pop()
+  return result.join('\n').trim()
+}
+
 async function processInboundEmail(params: {
   from_email: string
   from_name?: string
@@ -39,7 +54,8 @@ async function processInboundEmail(params: {
   in_reply_to?: string
   references?: string
 }): Promise<{ ticket_id: string; action: 'ticket_created' | 'message_added' }> {
-  const { from_email, from_name, subject, body, message_id, in_reply_to, references } = params
+  const { from_email, from_name, subject, message_id, in_reply_to, references } = params
+  const body = stripEmailQuotes(params.body)
   const now = new Date()
 
   const threadCandidates = extractMessageIds(in_reply_to, references)

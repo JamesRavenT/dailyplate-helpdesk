@@ -103,9 +103,11 @@ export default function Navbar() {
         >
           Tickets
           {!isAdmin && newCount > 0 && (
-            <span className="absolute -top-1.5 -right-3 flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            <span className="absolute -top-2 -right-4">
+              <span className="animate-ping absolute inset-0 rounded-full bg-red-400 opacity-60" />
+              <span className="relative flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1 leading-none">
+                {newCount > 99 ? '99+' : newCount}
+              </span>
             </span>
           )}
         </Link>

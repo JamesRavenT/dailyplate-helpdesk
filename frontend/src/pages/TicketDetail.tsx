@@ -115,9 +115,10 @@ export default function TicketDetail() {
   })
 
   // Update panel state — seeded from ticket once loaded
-  const [status,   setStatus]   = useState<HumanStatus | ''>('')
-  const [priority, setPriority] = useState<Priority | ''>('')
-  const [category, setCategory] = useState<TicketCategory | ''>('')
+  const [status,      setStatus]      = useState<HumanStatus | ''>('')
+  const [priority,    setPriority]    = useState<Priority | ''>('')
+  const [category,    setCategory]    = useState<TicketCategory | ''>('')
+  const [assignedToId, setAssignedToId] = useState<string | null>(null)
   const [updateError, setUpdateError] = useState<string | null>(null)
 
   // Reply state
@@ -141,6 +142,7 @@ export default function TicketDetail() {
       setStatus(humanStatuses.includes(ticket.status as HumanStatus) ? ticket.status as HumanStatus : '')
       setPriority(ticket.priority ?? '')
       setCategory(ticket.category ?? '')
+      setAssignedToId(ticket.assigned_to?.id ?? null)
       setSummary(ticket.summary ?? null)
     }
   }, [ticket?.id])
@@ -163,20 +165,11 @@ export default function TicketDetail() {
       setStatus(humanStatuses.includes(updated.status as HumanStatus) ? updated.status as HumanStatus : '')
       setPriority(updated.priority ?? '')
       setCategory(updated.category ?? '')
+      setAssignedToId(updated.assigned_to?.id ?? null)
       setUpdateError(null)
     },
     onError: (err: any) => {
       setUpdateError(err?.response?.data?.error ?? 'Update failed')
-    },
-  })
-
-  const assignMutation = useMutation({
-    mutationFn: (agentId: string | null) =>
-      axios.patch<TicketDetail>(`/api/tickets/${id}`, { assigned_to_id: agentId }).then(r => r.data),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(['tickets', id], updated)
-      queryClient.invalidateQueries({ queryKey: ['tickets'] })
-      setAgentModal(false)
     },
   })
 
@@ -225,6 +218,7 @@ export default function TicketDetail() {
       ...(status && { status }),
       priority: (priority as Priority) || null,
       category: (category as TicketCategory) || null,
+      assigned_to_id: assignedToId,
     }
     mutation.mutate(body)
   }
@@ -232,7 +226,8 @@ export default function TicketDetail() {
   const nothingChanged = !ticket
     || ((!status || status === ticket.status)
      && priority === (ticket.priority ?? '')
-     && category === (ticket.category ?? ''))
+     && category === (ticket.category ?? '')
+     && assignedToId === (ticket.assigned_to?.id ?? null))
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -368,7 +363,7 @@ export default function TicketDetail() {
             <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
               <h2 className="text-sm font-medium text-gray-700">Update Ticket</h2>
 
-              {/* Agent — admin only, button opens modal */}
+              {/* Agent — admin only, button opens modal; selection is staged until Save Changes */}
               {isAdmin && (
                 <div className="flex flex-col gap-1">
                   <span className="text-xs text-gray-500">Agent</span>
@@ -376,19 +371,17 @@ export default function TicketDetail() {
                     onClick={() => setAgentModal(true)}
                     className="w-full text-left text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white hover:bg-gray-50 transition-colors text-gray-800 truncate flex items-center gap-1.5"
                   >
-                    {ticket.is_ai_handled ? (
-                      <>
-                        <Brain className="h-3.5 w-3.5 shrink-0 text-purple-500" />
-                        <span>{ticket.assigned_to?.name ?? 'AI Agent'}</span>
-                      </>
-                    ) : ticket.assigned_to ? (
-                      <>
-                        <User className="h-3.5 w-3.5 shrink-0 text-gray-500" />
-                        <span>{ticket.assigned_to.name}</span>
-                      </>
-                    ) : (
-                      <span className="text-gray-400">Unassigned</span>
-                    )}
+                    {(() => {
+                      if (!assignedToId) {
+                        return <span className="text-gray-400">Unassigned</span>
+                      }
+                      const pendingAgent = agents.find(a => a.id === assignedToId)
+                      if (pendingAgent) {
+                        return <><User className="h-3.5 w-3.5 shrink-0 text-gray-500" /><span>{pendingAgent.name}</span></>
+                      }
+                      // ID set but not in agents list → AI agent
+                      return <><Brain className="h-3.5 w-3.5 shrink-0 text-purple-500" /><span>{ticket.assigned_to?.name ?? 'AI Agent'}</span></>
+                    })()}
                   </button>
                 </div>
               )}
@@ -501,10 +494,9 @@ export default function TicketDetail() {
             </h2>
 
             <div className="space-y-1 max-h-64 overflow-y-auto">
-              {ticket.assigned_to && (
+              {assignedToId && (
                 <button
-                  onClick={() => assignMutation.mutate(null)}
-                  disabled={assignMutation.isPending}
+                  onClick={() => { setAssignedToId(null); setAgentModal(false) }}
                   className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <p className="text-sm text-gray-800">Unassigned</p>
@@ -517,8 +509,7 @@ export default function TicketDetail() {
               {agents.map(a => (
                 <button
                   key={a.id}
-                  onClick={() => assignMutation.mutate(a.id)}
-                  disabled={assignMutation.isPending}
+                  onClick={() => { setAssignedToId(a.id); setAgentModal(false) }}
                   className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <p className="text-sm text-gray-800">{a.name}</p>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import axios from 'axios'
+import { useQuery } from '@tanstack/react-query'
 import { authClient } from '../lib/auth-client'
 
 type AgentStatus = 'ONLINE' | 'AWAY' | 'MEETING' | 'OFFLINE'
@@ -23,24 +24,21 @@ export default function Navbar() {
 
   const [status, setStatus] = useState<AgentStatus>('OFFLINE')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [newCount, setNewCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  // Poll for new tickets assigned to this agent
-  useEffect(() => {
-    if (isAdmin || !session) return
+  // React Query keeps this in sync with ticket mutations via prefix invalidation:
+  // invalidateQueries({ queryKey: ['tickets'] }) also invalidates ['tickets', 'stats'].
+  const { data: statsData } = useQuery({
+    queryKey: ['tickets', 'stats'],
+    queryFn: async () => {
+      const { data } = await axios.get<{ new: number }>('/api/tickets/stats')
+      return data
+    },
+    enabled: !isAdmin && !!session,
+    refetchInterval: 30_000,
+  })
 
-    async function fetchCount() {
-      try {
-        const { data } = await axios.get<{ new: number }>('/api/tickets/stats')
-        setNewCount(data.new ?? 0)
-      } catch {}
-    }
-
-    fetchCount()
-    const id = setInterval(fetchCount, 30_000)
-    return () => clearInterval(id)
-  }, [session?.user?.id, isAdmin])
+  const newCount = statsData?.new ?? 0
 
   // Sync from session; auto-set ONLINE when logged in as agent
   useEffect(() => {

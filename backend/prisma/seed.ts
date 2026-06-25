@@ -369,6 +369,76 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
     content: `- Customer asks a detailed business/legal/press question — redirect to hello@dailyplate.fakesite.
 - Customer requests information about corporate or bulk orders — redirect to corporate@dailyplate.fakesite.`,
   },
+
+  // ── OTHER ──────────────────────────────────────────────────────────────────
+
+  {
+    category: TicketCategory.OTHER,
+    title: 'Handling Spam Messages',
+    content: `Spam messages are unsolicited, irrelevant, or bulk submissions sent through the support channel that are not genuine customer enquiries.
+
+**How to identify spam:**
+- Identical or near-identical messages submitted multiple times in a short period.
+- Messages with no relation to DailyPlate products or services (e.g., advertisements, phishing links, unrelated promotions).
+- Automated-looking messages with no coherent question or complaint.
+- Messages containing only links, random characters, or copy-pasted promotional text.
+
+**Steps to handle:**
+1. Do not reply to spam messages.
+2. Close the ticket with status **Closed** and set the category to **Other**.
+3. If the same email address is submitting repeated spam, flag it to an admin for review — the account or email may need to be blocked.
+4. Do not mark a message as spam solely because it is poorly written or hard to understand — attempt to interpret genuine intent first.
+
+**Escalation Triggers:**
+- Spam messages contain phishing links or malware — forward to the security team immediately.
+- A single source is flooding the queue (10+ tickets in under an hour) — escalate to admin to block the sender.`,
+  },
+  {
+    category: TicketCategory.OTHER,
+    title: 'Handling Abusive Language',
+    content: `Abusive messages contain language that is threatening, discriminatory, harassing, or severely offensive toward DailyPlate staff or other individuals.
+
+**How to identify abusive language:**
+- Personal threats or threats of violence directed at staff or the company.
+- Slurs or discriminatory language based on race, gender, religion, nationality, or other protected characteristics.
+- Sustained, targeted harassment across multiple messages.
+- Extreme profanity used aggressively (note: mild frustration with occasional strong language is not abuse — use judgement).
+
+**Steps to handle:**
+1. Do not engage with the abusive content — agents are not required to tolerate abuse.
+2. Send a single professional warning if this is a first occurrence:
+   > "We understand you may be frustrated and we want to help. However, we're unable to continue this conversation while abusive language is being used. Please contact us again and we'll be happy to assist."
+3. If the customer continues after the warning, close the ticket with status **Closed** and log an abuse report.
+4. Do not delete any messages — preserve the full record for the report.
+5. Escalate to an admin so the account can be flagged.
+
+**Escalation Triggers:**
+- Message contains a credible threat of physical harm — escalate to admin and legal immediately; do not respond to the customer.
+- Abuse is directed at a specific named agent — notify the agent's manager.`,
+  },
+  {
+    category: TicketCategory.OTHER,
+    title: 'Handling Prank & Non-Genuine Chats',
+    content: `Prank or non-genuine messages are submissions that are clearly not serious support requests — they may be joke messages, test submissions, gibberish, or attempts to waste agent time.
+
+**How to identify non-genuine messages:**
+- Nonsense or gibberish content (e.g., "asdfghjkl", "hahaha", "lol").
+- Obvious jokes or fictional scenarios unrelated to DailyPlate (e.g., "My food was eaten by a dragon").
+- Messages that explicitly state they are a test or prank.
+- Repetitive single-character or emoji-only submissions.
+
+**Steps to handle:**
+1. Do not spend time crafting a detailed response.
+2. If there is any small chance the message is genuine (e.g., autocorrect-mangled text), send a brief clarification request:
+   > "Hi, we received your message but weren't able to understand your request. Could you let us know how we can help you today?"
+3. If no response is received within 48 hours, or if the message is clearly non-genuine, close the ticket as **Closed**.
+4. Do not mock or belittle the sender in any response — keep all communication professional.
+5. If the same sender submits repeated prank messages, flag to an admin for review.
+
+**Escalation Triggers:**
+- Prank messages escalate into abusive language — switch to the Abusive Language SOP.
+- A pattern of prank submissions is suspected to be a coordinated attempt to disrupt operations — escalate to admin.`,
+  },
 ]
 
 // ─── Seed ─────────────────────────────────────────────────────────────────────

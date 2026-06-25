@@ -126,8 +126,9 @@ export default function TicketDetail() {
   const [assignedToId, setAssignedToId] = useState<string | null>(null)
   const [updateError, setUpdateError] = useState<string | null>(null)
 
-  // Reply state
-  const [replyBody,    setReplyBody]    = useState('')
+  // Reply state — draft persisted in localStorage so navigation doesn't wipe it
+  const draftKey = `reply-draft-${id}`
+  const [replyBody,    setReplyBody]    = useState(() => localStorage.getItem(`reply-draft-${id}`) ?? '')
   const [replyError,   setReplyError]   = useState<string | null>(null)
   const [isPolishing,    setIsPolishing]    = useState(false)
   const [polishError,    setPolishError]    = useState<string | null>(null)
@@ -183,6 +184,7 @@ export default function TicketDetail() {
       axios.post(`/api/tickets/${id}/messages`, { body }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets', id] })
+      localStorage.removeItem(draftKey)
       setReplyBody('')
       setReplyError(null)
     },
@@ -198,6 +200,7 @@ export default function TicketDetail() {
     try {
       const { data } = await axios.post<{ polished: string }>(`/api/tickets/${id}/polish`, { body: replyBody.trim() })
       setReplyBody(data.polished)
+      localStorage.setItem(draftKey, data.polished)
     } catch (err: any) {
       setPolishError(err?.response?.data?.error ?? 'Failed to polish reply')
     } finally {
@@ -333,7 +336,7 @@ export default function TicketDetail() {
                   <h2 className="text-sm font-medium text-gray-700 mb-3">Reply</h2>
                   <textarea
                     value={replyBody}
-                    onChange={e => setReplyBody(e.target.value)}
+                    onChange={e => { setReplyBody(e.target.value); localStorage.setItem(draftKey, e.target.value) }}
                     onKeyDown={e => {
                       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && replyBody.trim()) {
                         replyMutation.mutate(replyBody.trim())

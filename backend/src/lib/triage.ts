@@ -115,16 +115,24 @@ async function handleProcessJobs(jobs: Job<ProcessJobData>[]) {
     : ''
 
   for (const job of jobs) {
-    const { ticketId, subject, body } = job.data
+    const { ticketId } = job.data
     const now = new Date()
 
     const ticketContact = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { customer_email: true, customer_name: true, email_thread_id: true },
+      select: {
+        customer_email: true,
+        customer_name: true,
+        email_thread_id: true,
+        subject: true,
+        messages: { where: { sender_type: 'CUSTOMER' }, orderBy: { sent_at: 'asc' }, take: 1, select: { body: true } },
+      },
     })
 
     const customerEmail = ticketContact?.customer_email ?? ''
-    const rawName = ticketContact?.customer_name ?? ''
+    const rawName       = ticketContact?.customer_name  ?? ''
+    const subject = job.data.subject ?? ticketContact?.subject ?? ''
+    const body    = job.data.body    ?? ticketContact?.messages[0]?.body ?? ''
 
     const { object } = await generateObject({
       model: openai('gpt-4.1-nano'),

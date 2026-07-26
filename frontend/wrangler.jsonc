@@ -1,0 +1,17 @@
+// Set BACKEND_ORIGIN to the Render backend URL via dashboard/secret or per-environment vars.
+// Requests to /api/internal/* are intentionally blocked at this public edge.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "helpdesk-web",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-25",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api", "/api/*", "/health"]
+  },
+  "vars": {
+    "BACKEND_ORIGIN": "https://REPLACE_WITH_RENDER_URL"
+  }
+}

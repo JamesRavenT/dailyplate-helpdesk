@@ -151,7 +151,7 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
   } catch (err) { next(err) }
 }
 
-// ─── Resend inbound webhook ────────────────────────────────────────────────────
+// ─── Resend inbound event processing ──────────────────────────────────────────
 
 // Parse "Display Name <email@example.com>" → { email, name }
 function parseFrom(from: string): { email: string; name: string | undefined } {
@@ -167,63 +167,50 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
-export async function resendInboundEmail(req: Request, res: Response, next: NextFunction) {
-  try {
-    // req.body is a raw Buffer here (express.raw applied before express.json for this route)
-    const rawPayload = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : JSON.stringify(req.body)
+export interface ResendEvent {
+  type: string
+  data: {
+    email_id: string
+    from: string
+    subject: string
+    message_id?: string
+  }
+}
 
-    // Verify Resend webhook signature
-    try {
-      resend.webhooks.verify({
-        payload: rawPayload,
-        headers: {
-          id: req.headers['svix-id'] as string,
-          timestamp: req.headers['svix-timestamp'] as string,
-          signature: req.headers['svix-signature'] as string,
-        },
-        webhookSecret: process.env.RESEND_INBOUND_SECRET!,
-      })
-    } catch {
-      return res.status(401).json({ error: 'Invalid webhook signature' })
-    }
+export async function processResendEvent(event: ResendEvent) {
+  if (event.type !== 'email.received') {
+    return { ignored: true as const }
+  }
 
-    const event = JSON.parse(rawPayload) as { type: string; data: { email_id: string; from: string; subject: string; message_id?: string } }
-    if (event.type !== 'email.received') {
-      return res.status(200).json({ ignored: true })
-    }
+  // Fetch full email content (body + headers not in webhook payload)
+  const { data: email, error: fetchError } = await resend.emails.receiving.get(event.data.email_id)
+  if (fetchError || !email) {
+    console.error('[resend] failed to fetch email content', fetchError)
+    throw new Error('Failed to fetch email content')
+  }
 
-    // Fetch full email content (body + headers not in webhook payload)
-    const { data: email, error: fetchError } = await resend.emails.receiving.get(event.data.email_id)
-    if (fetchError || !email) {
-      console.error('[resend] failed to fetch email content', fetchError)
-      return res.status(500).json({ error: 'Failed to fetch email content' })
-    }
+  const body = email.text || (email.html ? stripHtml(email.html) : '')
+  if (!body) {
+    return { ignored: true as const, reason: 'empty body' }
+  }
 
-    const body = email.text || (email.html ? stripHtml(email.html) : '')
-    if (!body) {
-      return res.status(200).json({ ignored: true, reason: 'empty body' })
-    }
+  const emailHeaders: Record<string, string> = {}
+  for (const [k, v] of Object.entries(email.headers ?? {})) {
+    emailHeaders[k.toLowerCase()] = v
+  }
+  const inReplyTo = emailHeaders['in-reply-to']
+  const references = emailHeaders['references']
+  const messageId = event.data.message_id ?? emailHeaders['message-id']
 
-    const emailHeaders: Record<string, string> = {}
-    for (const [k, v] of Object.entries(email.headers ?? {})) {
-      emailHeaders[k.toLowerCase()] = v
-    }
-    const inReplyTo = emailHeaders['in-reply-to']
-    const references = emailHeaders['references']
-    const messageId = event.data.message_id ?? emailHeaders['message-id']
+  const { email: fromEmail, name: fromName } = parseFrom(event.data.from)
 
-    const { email: fromEmail, name: fromName } = parseFrom(event.data.from)
-
-    const result = await processInboundEmail({
-      from_email: fromEmail,
-      from_name: fromName,
-      subject: event.data.subject,
-      body,
-      message_id: messageId,
-      in_reply_to: inReplyTo,
-      references,
-    })
-
-    return res.status(200).json(result)
-  } catch (err) { next(err) }
+  return processInboundEmail({
+    from_email: fromEmail,
+    from_name: fromName,
+    subject: event.data.subject,
+    body,
+    message_id: messageId,
+    in_reply_to: inReplyTo,
+    references,
+  })
 }

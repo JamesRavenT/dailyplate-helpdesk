@@ -30,27 +30,27 @@ unauthTest.describe('Login form', () => {
 
   unauthTest('admin can log in with valid credentials and is redirected to /', async ({ page }) => {
     await page.getByLabel('Email').fill(USERS.admin.email)
-    await page.getByLabel('Password').fill(USERS.admin.password)
+    await page.getByLabel('Password', { exact: true }).fill(USERS.admin.password)
     await page.getByRole('button', { name: 'Sign In' }).click()
 
     await page.waitForURL('/')
-    await unauthExpect(page.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+    await unauthExpect(page.getByRole('button', { name: 'Open user menu' })).toBeVisible()
   })
 
   unauthTest('agent can log in with valid credentials and is redirected to /', async ({ page }) => {
     await page.getByLabel('Email').fill(USERS.agent.email)
-    await page.getByLabel('Password').fill(USERS.agent.password)
+    await page.getByLabel('Password', { exact: true }).fill(USERS.agent.password)
     await page.getByRole('button', { name: 'Sign In' }).click()
 
     await page.waitForURL('/')
-    await unauthExpect(page.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+    await unauthExpect(page.getByRole('button', { name: 'Open user menu' })).toBeVisible()
   })
 
   // Server-side errors
 
   unauthTest('wrong password shows an error and stays on /login', async ({ page }) => {
     await page.getByLabel('Email').fill(USERS.admin.email)
-    await page.getByLabel('Password').fill('wrongpassword')
+    await page.getByLabel('Password', { exact: true }).fill('wrongpassword')
     await page.getByRole('button', { name: 'Sign In' }).click()
 
     await unauthExpect(page.getByText(/invalid email or password/i)).toBeVisible()
@@ -59,7 +59,7 @@ unauthTest.describe('Login form', () => {
 
   unauthTest('unknown email shows an error and stays on /login', async ({ page }) => {
     await page.getByLabel('Email').fill('nobody@example.com')
-    await page.getByLabel('Password').fill('somepassword')
+    await page.getByLabel('Password', { exact: true }).fill('somepassword')
     await page.getByRole('button', { name: 'Sign In' }).click()
 
     await unauthExpect(page.getByText(/invalid email or password/i)).toBeVisible()
@@ -69,7 +69,7 @@ unauthTest.describe('Login form', () => {
   // Client-side validation
 
   unauthTest('submitting with empty email shows a validation error', async ({ page }) => {
-    await page.getByLabel('Password').fill(USERS.admin.password)
+    await page.getByLabel('Password', { exact: true }).fill(USERS.admin.password)
     await page.getByRole('button', { name: 'Sign In' }).click()
 
     await unauthExpect(page.getByText('Email is required')).toBeVisible()
@@ -86,7 +86,7 @@ unauthTest.describe('Login form', () => {
 
   unauthTest('submitting with an invalid email format shows a validation error', async ({ page }) => {
     await page.getByLabel('Email').fill('not-an-email')
-    await page.getByLabel('Password').fill(USERS.admin.password)
+    await page.getByLabel('Password', { exact: true }).fill(USERS.admin.password)
     await page.getByRole('button', { name: 'Sign In' }).click()
 
     await unauthExpect(page.getByText('Enter a valid email')).toBeVisible()
@@ -105,7 +105,7 @@ unauthTest.describe('Login form', () => {
 
   unauthTest('Sign In button is disabled and shows "Signing in…" while submitting', async ({ page }) => {
     await page.getByLabel('Email').fill(USERS.admin.email)
-    await page.getByLabel('Password').fill(USERS.admin.password)
+    await page.getByLabel('Password', { exact: true }).fill(USERS.admin.password)
 
     // Intercept the auth request to hold it open long enough to observe the
     // button's intermediate state.
@@ -129,17 +129,17 @@ unauthTest.describe('Login form', () => {
 test.describe('Session persistence', () => {
   test('authenticated user remains logged in after a full page reload', async ({ adminPage }) => {
     await adminPage.goto('/')
-    await expect(adminPage.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Open user menu' })).toBeVisible()
 
     await adminPage.reload()
 
-    await expect(adminPage.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Open user menu' })).toBeVisible()
   })
 
   test('visiting /login while already authenticated redirects to /', async ({ adminPage }) => {
     await adminPage.goto('/login')
     await adminPage.waitForURL('/')
-    await expect(adminPage.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+    await expect(adminPage.getByRole('button', { name: 'Open user menu' })).toBeVisible()
   })
 })
 
@@ -180,7 +180,7 @@ test.describe('Role-based access control', () => {
   test('agent visiting /users is redirected to /', async ({ agentPage }) => {
     await agentPage.goto('/users')
     await agentPage.waitForURL('/')
-    await expect(agentPage.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+    await expect(agentPage.getByRole('button', { name: 'Open user menu' })).toBeVisible()
     await expect(agentPage).toHaveURL('/')
   })
 
@@ -199,18 +199,23 @@ test.describe('Role-based access control', () => {
 // session record — any subsequent test loading the same stored cookie would
 // hit an invalid session and never see the Sign Out button.
 unauthTest.describe('Sign-out', () => {
+  async function signOut(page: import('@playwright/test').Page) {
+    await page.getByRole('button', { name: 'Open user menu' }).click()
+    await page.getByRole('menuitem', { name: 'Sign Out' }).click()
+  }
+
   async function freshSignIn(page: import('@playwright/test').Page) {
     await page.goto('/login')
     await unauthExpect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
     await page.getByLabel('Email').fill(USERS.admin.email)
-    await page.getByLabel('Password').fill(USERS.admin.password)
+    await page.getByLabel('Password', { exact: true }).fill(USERS.admin.password)
     await page.getByRole('button', { name: 'Sign In' }).click()
     await page.waitForURL('/')
   }
 
   unauthTest('clicking Sign Out navigates to /login', async ({ page }) => {
     await freshSignIn(page)
-    await page.getByRole('button', { name: 'Sign Out' }).click()
+    await signOut(page)
 
     await page.waitForURL('/login')
     await unauthExpect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
@@ -218,7 +223,7 @@ unauthTest.describe('Sign-out', () => {
 
   unauthTest('after sign-out, visiting / redirects back to /login', async ({ page }) => {
     await freshSignIn(page)
-    await page.getByRole('button', { name: 'Sign Out' }).click()
+    await signOut(page)
     await page.waitForURL('/login')
 
     await page.goto('/')
@@ -228,7 +233,7 @@ unauthTest.describe('Sign-out', () => {
 
   unauthTest('after sign-out, visiting /users redirects back to /login', async ({ page }) => {
     await freshSignIn(page)
-    await page.getByRole('button', { name: 'Sign Out' }).click()
+    await signOut(page)
     await page.waitForURL('/login')
 
     await page.goto('/users')

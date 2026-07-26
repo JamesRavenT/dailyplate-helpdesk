@@ -7,7 +7,6 @@ import { authClient } from '../lib/auth-client'
 import TicketDetail from './TicketDetail'
 
 vi.mock('axios', () => ({ default: { get: vi.fn(), patch: vi.fn(), post: vi.fn() } }))
-vi.mock('../components/Navbar', () => ({ default: () => <nav /> }))
 vi.mock('../lib/auth-client', () => ({ authClient: { useSession: vi.fn() } }))
 
 const mockNavigate = vi.fn()
@@ -295,7 +294,10 @@ describe('TicketDetail page', () => {
     mockedGet.mockResolvedValue({ data: mockTicket })
     renderWithQuery(agentSession)
     await screen.findByRole('heading', { name: 'Cannot log in' })
-    expect(screen.getByRole('button', { name: /^polish$/i })).toBeDisabled()
+    const polishButton = screen.getByRole('button', { name: /^polish$/i })
+    expect(polishButton).toBeDisabled()
+    fireEvent.click(polishButton)
+    expect(mockedPost).not.toHaveBeenCalled()
   })
 
   it('Polish button becomes enabled when text is entered', async () => {

@@ -201,7 +201,7 @@ async function main() {
       },
     })
 
-    await boss.send(PROCESS_QUEUE, { ticketId: ticket.id })
+    await boss.send(PROCESS_QUEUE, { ticketId: ticket.id, customerName: t.customer_name, subject: t.subject, body: t.body })
     console.log(`  [${i + 1}/${tickets.length}] queued  ${t.subject.slice(0, 55)}`)
   }
 

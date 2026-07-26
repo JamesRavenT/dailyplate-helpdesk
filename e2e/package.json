@@ -1,13 +1,18 @@
 {
   "name": "helpdesk-e2e",
   "private": true,
+  "packageManager": "npm@10.9.8",
   "scripts": {
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "report": "allure generate allure-results --clean -o allure-report && allure open allure-report",
+    "report:generate": "allure generate allure-results --clean -o allure-report"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",
+    "allure-commandline": "^2.29.0",
+    "allure-playwright": "^2.15.1",
     "dotenv": "^16.4.5"
   }
 }

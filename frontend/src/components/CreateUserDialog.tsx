@@ -8,6 +8,8 @@ import { Eye, EyeOff } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -60,9 +62,10 @@ export default function CreateUserDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create User</DialogTitle>
+          <DialogDescription>Add a support user with secure email and password credentials.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit((values) => mutation.mutate(values))} noValidate className="space-y-4">
@@ -76,7 +79,7 @@ export default function CreateUserDialog({ open, onOpenChange }: Props) {
               {...register('name')}
             />
             {errors.name && (
-              <p className="text-xs text-destructive">{errors.name.message}</p>
+              <p role="alert" className="text-caption text-destructive">{errors.name.message}</p>
             )}
           </div>
 
@@ -91,7 +94,7 @@ export default function CreateUserDialog({ open, onOpenChange }: Props) {
               {...register('email')}
             />
             {errors.email && (
-              <p className="text-xs text-destructive">{errors.email.message}</p>
+              <p role="alert" className="text-caption text-destructive">{errors.email.message}</p>
             )}
           </div>
 
@@ -102,33 +105,39 @@ export default function CreateUserDialog({ open, onOpenChange }: Props) {
                 id="cu-password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
+                className="pr-10"
                 autoComplete="new-password"
                 aria-invalid={!!errors.password || undefined}
                 {...register('password')}
               />
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 onClick={() => setShowPassword(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                tabIndex={-1}
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground"
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+                {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+              </Button>
             </div>
             {errors.password && (
-              <p className="text-xs text-destructive">{errors.password.message}</p>
+              <p role="alert" className="text-caption text-destructive">{errors.password.message}</p>
             )}
           </div>
 
           {mutation.isError && (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p role="alert" className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-label text-destructive">
               {(mutation.error as AxiosError<{ error: string }>)?.response?.data?.error ?? 'Failed to create user'}
             </p>
           )}
 
-          <Button type="submit" className="w-full" disabled={mutation.isPending}>
-            {mutation.isPending ? 'Creating…' : 'Create User'}
-          </Button>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" loading={mutation.isPending} disabled={mutation.isPending}>
+              {mutation.isPending ? 'Creating…' : 'Create User'}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

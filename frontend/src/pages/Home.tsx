@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ElementType } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
@@ -12,13 +12,17 @@ import {
   Area,
   AreaChart,
 } from 'recharts'
-import Navbar from '../components/Navbar'
 import { authClient } from '../lib/auth-client'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Card, CardContent, CardHeader } from '../components/ui/card'
 import { Skeleton } from '../components/ui/skeleton'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { EmptyState } from '../components/ui/empty-state'
+import { ErrorState } from '../components/ui/error-state'
+import { StatusBadge, type TicketStatus } from '../components/ui/status-badge'
+import { PriorityBadge, type TicketPriority } from '../components/ui/priority-badge'
+import { CategoryBadge, type TicketCategory } from '../components/ui/category-badge'
 import { getRecentViewIds } from '../lib/recentViews'
 import {
   Ticket,
@@ -33,6 +37,7 @@ import {
   Eye,
   EyeOff,
   X,
+  UserRound,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -66,8 +71,9 @@ type TicketCard = {
   id: string
   subject: string
   customer_name: string
-  status: string
-  priority: string | null
+  status: TicketStatus
+  priority: TicketPriority | null
+  category?: TicketCategory | null
   created_at: string
   last_updated_at: string | null
 }
@@ -95,69 +101,128 @@ function formatDay(iso: string) {
 }
 
 const CHART_COLORS = {
-  received:         '#6366f1', // indigo  — neutral inbound
-  resolved:         '#10b981', // emerald — positive outcome
-  resolvedByAI:     '#a855f7', // purple  — AI (matches existing AI badges)
-  resolvedByAgents: '#0ea5e9', // sky     — human agent work
+  received:         'var(--status-open)',
+  resolved:         'var(--status-resolved)',
+  resolvedByAI:     'var(--status-ai-resolved)',
+  resolvedByAgents: 'var(--primary)',
+}
+
+const ADMIN_CHART_SERIES: ChartSeries[] = [
+  { key: 'Received', color: CHART_COLORS.received, gradient: 'admin-received' },
+  { key: 'Resolved', color: CHART_COLORS.resolved, gradient: 'admin-resolved' },
+  { key: 'Resolved by AI', color: CHART_COLORS.resolvedByAI, gradient: 'admin-ai' },
+  { key: 'Resolved by Agents', color: CHART_COLORS.resolvedByAgents, gradient: 'admin-agents' },
+]
+
+const AGENT_CHART_SERIES: ChartSeries[] = [
+  { key: 'Received', color: CHART_COLORS.received, gradient: 'agent-received' },
+  { key: 'Resolved / Closed', color: CHART_COLORS.resolved, gradient: 'agent-resolved' },
+]
+
+function shareOf(value: number, total: number) {
+  if (total === 0) return 'No tickets yet'
+  return `${Math.round((value / total) * 100)}% of total`
 }
 
 // ─── Ticket slideshow ─────────────────────────────────────────────────────────
 
-const statusColors: Record<string, string> = {
-  OPEN:          'bg-blue-100 text-blue-700',
-  IN_PROGRESS:   'bg-amber-100 text-amber-700',
-  RESOLVED:      'bg-green-100 text-green-700',
-  CLOSED:        'bg-gray-100 text-gray-600',
-  AI_RESOLVED:   'bg-purple-100 text-purple-700',
-  AI_PROCESSING: 'bg-indigo-100 text-indigo-700',
-}
-
-const statusLabels: Record<string, string> = {
-  OPEN:          'Open',
-  IN_PROGRESS:   'In Progress',
-  RESOLVED:      'Resolved',
-  CLOSED:        'Closed',
-  AI_RESOLVED:   'AI Resolved',
-  AI_PROCESSING: 'AI Processing',
-}
-
-const priorityColors: Record<string, string> = {
-  LOW:    'text-gray-500',
-  MEDIUM: 'text-amber-600',
-  HIGH:   'text-red-600',
-}
-
 const PAGE_SIZE = 2
+
+const ticketRail: Record<TicketPriority, string> = {
+  LOW: 'before:bg-muted-foreground/45',
+  MEDIUM: 'before:bg-status-inprogress',
+  HIGH: 'before:bg-status-danger',
+}
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false,
+  )
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const update = () => setPrefersReducedMotion(media.matches)
+    media.addEventListener?.('change', update)
+    return () => media.removeEventListener?.('change', update)
+  }, [])
+
+  return prefersReducedMotion
+}
+
+function ticketTimestamp(ticket: TicketCard) {
+  const value = ticket.last_updated_at ?? ticket.created_at
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value))
+}
 
 function TicketSlideshow({
   tickets,
   isPending,
+  isError = false,
+  onRetry,
   emptyMessage,
 }: {
   tickets: TicketCard[]
   isPending: boolean
+  isError?: boolean
+  onRetry?: () => void
   emptyMessage: string
 }) {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
   const [paused, setPaused] = useState(false)
+  const prefersReducedMotion = usePrefersReducedMotion()
 
   const totalPages = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE))
 
   useEffect(() => { setPage(0) }, [tickets.length])
 
   useEffect(() => {
-    if (paused || totalPages <= 1) return
+    if (paused || prefersReducedMotion || totalPages <= 1) return
     const id = setInterval(() => {
       setPage(prev => (prev + 1) % totalPages)
     }, 4000)
     return () => clearInterval(id)
-  }, [paused, totalPages])
+  }, [paused, prefersReducedMotion, totalPages])
 
-  if (isPending) return <Skeleton className="h-32 w-full rounded-xl" />
+  if (isPending) {
+    return (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2" aria-label="Loading tickets">
+        {Array.from({ length: PAGE_SIZE }).map((_, index) => (
+          <Card key={index} size="sm" className="min-h-36">
+            <CardHeader className="gap-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-4/5" />
+            </CardHeader>
+            <CardContent className="flex gap-2">
+              <Skeleton className="h-5 w-16 rounded-full" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        className="min-h-36"
+        title="Tickets unavailable"
+        description="The latest ticket queue could not be loaded."
+        action={onRetry ? <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button> : undefined}
+      />
+    )
+  }
 
   if (tickets.length === 0) {
-    return <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+    return <EmptyState className="min-h-36" title={emptyMessage} />
   }
 
   const safePage = page % totalPages
@@ -166,63 +231,88 @@ function TicketSlideshow({
   return (
     <div
       className="flex flex-col items-center"
+      aria-label="Ticket carousel"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
     >
       <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
         {visible.map(ticket => (
-          <div
+          <Card
             key={ticket.id}
-            className="cursor-pointer"
-            onClick={() => navigate(`/tickets/${ticket.id}`)}
+            size="sm"
+            className={`relative min-h-40 overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-1 ${ticket.priority ? ticketRail[ticket.priority] : 'before:bg-status-open'}`}
           >
-            <Card className="h-full transition-shadow hover:shadow-md">
-              <CardHeader>
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="line-clamp-2 text-sm font-medium leading-snug">
-                    {ticket.subject}
-                  </CardTitle>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[ticket.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                    {statusLabels[ticket.status] ?? ticket.status}
-                  </span>
+            <CardHeader className="gap-3 pl-5">
+              <div className="flex items-center justify-between gap-3">
+                <span className="tabular truncate text-caption text-muted-foreground">
+                  #{ticket.id.slice(0, 8)}
+                </span>
+                <StatusBadge status={ticket.status} />
+              </div>
+              <a
+                href={`/tickets/${ticket.id}`}
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigate(`/tickets/${ticket.id}`)
+                }}
+                className="line-clamp-2 text-body-lg font-semibold leading-snug tracking-tight text-foreground outline-none transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
+              >
+                {ticket.subject}
+              </a>
+            </CardHeader>
+            <CardContent className="mt-auto pl-5">
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-label font-medium text-foreground">{ticket.customer_name}</p>
+                  <p className="tabular mt-0.5 text-caption text-muted-foreground">Updated {ticketTimestamp(ticket)}</p>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs text-muted-foreground">{ticket.customer_name}</p>
-                {ticket.priority && (
-                  <p className={`mt-1 text-xs font-medium ${priorityColors[ticket.priority] ?? ''}`}>
-                    {ticket.priority} priority
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                  {ticket.category ? <CategoryBadge category={ticket.category} /> : null}
+                  {ticket.priority ? (
+                    <>
+                      <PriorityBadge priority={ticket.priority} aria-hidden="true" />
+                      <span className="sr-only">{ticket.priority} priority</span>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       {totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-center gap-3">
-          <button
+        <div className="mt-4 flex items-center justify-center gap-2" aria-label="Ticket pages">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Previous ticket page"
             onClick={() => setPage(prev => (prev - 1 + totalPages) % totalPages)}
-            className="rounded-full p-1 text-gray-400 hover:text-gray-700"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="flex gap-1.5">
+            <ChevronLeft aria-hidden="true" />
+          </Button>
+          <div className="flex items-center gap-1.5">
             {Array.from({ length: totalPages }).map((_, i) => (
               <button
                 key={i}
+                type="button"
+                aria-label={`Go to ticket page ${i + 1}`}
+                aria-current={i === safePage ? 'page' : undefined}
                 onClick={() => setPage(i)}
-                className={`h-2 w-2 rounded-full transition-colors ${i === safePage ? 'bg-gray-800' : 'bg-gray-300 hover:bg-gray-500'}`}
+                className={`size-2 rounded-full outline-none transition-[background-color,transform] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none ${i === safePage ? 'scale-110 bg-primary' : 'bg-border hover:bg-muted-foreground/60'}`}
               />
             ))}
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Next ticket page"
             onClick={() => setPage(prev => (prev + 1) % totalPages)}
-            className="rounded-full p-1 text-gray-400 hover:text-gray-700"
           >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+            <ChevronRight aria-hidden="true" />
+          </Button>
         </div>
       )}
     </div>
@@ -235,27 +325,28 @@ function StatCard({
   icon: Icon,
   label,
   value,
-  iconClass,
+  detail,
+  tone,
   accent,
 }: {
-  icon: React.ElementType
+  icon: ElementType
   label: string
   value: number
-  iconClass: string
+  detail: string
+  tone: string
   accent: string
 }) {
   return (
-    <Card className={`ring-0 border border-border border-l-4 ${accent}`}>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
-          <div className={`rounded-full p-2 ${iconClass}`}>
-            <Icon className="h-4 w-4" />
-          </div>
-        </div>
+    <Card size="sm" className={`relative min-h-32 before:absolute before:inset-y-0 before:left-0 before:w-1 ${accent}`}>
+      <CardHeader className="flex-row items-start justify-between gap-3 pl-5">
+        <p className="text-caption font-medium text-muted-foreground">{label}</p>
+        <span className={`flex size-8 shrink-0 items-center justify-center rounded-lg ${tone}`}>
+          <Icon aria-hidden="true" className="size-4" />
+        </span>
       </CardHeader>
-      <CardContent>
-        <p className="text-3xl font-bold">{value}</p>
+      <CardContent className="mt-auto pl-5">
+        <p className="tabular text-[1.75rem] font-semibold leading-none tracking-[-0.04em] text-foreground">{value}</p>
+        <p className="mt-2 text-caption text-muted-foreground">{detail}</p>
       </CardContent>
     </Card>
   )
@@ -267,9 +358,15 @@ function StatSkeletons({ count }: { count: number }) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <Card key={i}>
-          <CardHeader><Skeleton className="h-4 w-24" /></CardHeader>
-          <CardContent><Skeleton className="mt-2 h-8 w-12" /></CardContent>
+        <Card key={i} size="sm" className="min-h-32">
+          <CardHeader className="flex-row justify-between">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="size-8 rounded-lg" />
+          </CardHeader>
+          <CardContent className="mt-auto space-y-2">
+            <Skeleton className="h-8 w-14" />
+            <Skeleton className="h-3 w-24" />
+          </CardContent>
         </Card>
       ))}
     </>
@@ -278,12 +375,114 @@ function StatSkeletons({ count }: { count: number }) {
 
 // ─── Chart skeleton ───────────────────────────────────────────────────────────
 
-function ChartSkeleton() {
+function ChartSkeleton({ title }: { title: string }) {
   return (
     <Card>
-      <CardHeader><Skeleton className="h-4 w-40" /></CardHeader>
+      <CardHeader>
+        <h2 className="text-body-lg font-semibold tracking-tight text-foreground">{title}</h2>
+        <Skeleton className="h-3 w-48" />
+      </CardHeader>
       <CardContent>
-        <Skeleton className="h-52 w-full rounded-lg" />
+        <Skeleton className="h-56 w-full rounded-lg" />
+      </CardContent>
+    </Card>
+  )
+}
+
+type ChartSeries = {
+  key: string
+  color: string
+  gradient: string
+}
+
+function ActivityChart({
+  title,
+  description,
+  data,
+  series,
+}: {
+  title: string
+  description: string
+  data: Array<Record<string, string | number>>
+  series: ChartSeries[]
+}) {
+  const totalReceived = data.reduce((sum, point) => sum + Number(point.Received ?? 0), 0)
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col justify-between gap-1 sm:flex-row sm:items-end">
+          <div>
+            <h2 className="text-body-lg font-semibold tracking-tight text-foreground">{title}</h2>
+            <p className="mt-1 text-caption text-muted-foreground">{description}</p>
+          </div>
+          <p className="tabular text-caption text-muted-foreground">
+            <span className="font-semibold text-foreground">{totalReceived}</span> received
+          </p>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div
+          role="img"
+          aria-label={`${title}. ${totalReceived} tickets received across the last 30 days.`}
+          className="h-60 w-full"
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+              <defs>
+                {series.map(item => (
+                  <linearGradient key={item.gradient} id={item.gradient} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={item.color} stopOpacity={0.16} />
+                    <stop offset="95%" stopColor={item.color} stopOpacity={0} />
+                  </linearGradient>
+                ))}
+              </defs>
+              <CartesianGrid strokeDasharray="2 5" stroke="var(--border)" strokeOpacity={0.75} vertical={false} />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'var(--font-geist-mono)' }}
+                tickLine={false}
+                axisLine={false}
+                interval={4}
+                tickMargin={10}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: 'var(--muted-foreground)', fontFamily: 'var(--font-geist-mono)' }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+                width={32}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'var(--popover)',
+                  color: 'var(--popover-foreground)',
+                  boxShadow: 'var(--elevation-e2)',
+                  fontFamily: 'var(--font-geist-mono)',
+                  fontSize: 12,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+                labelStyle={{ color: 'var(--muted-foreground)', marginBottom: 6 }}
+                cursor={{ stroke: 'var(--border)' }}
+              />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: 12, paddingTop: 14 }} />
+              {series.map(item => (
+                <Area
+                  key={item.key}
+                  dataKey={item.key}
+                  type="monotone"
+                  stroke={item.color}
+                  strokeWidth={2}
+                  fill={`url(#${item.gradient})`}
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 2, fill: 'var(--card)' }}
+                />
+              ))}
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </CardContent>
     </Card>
   )
@@ -292,22 +491,49 @@ function ChartSkeleton() {
 // ─── Online agents list ───────────────────────────────────────────────────────
 
 const agentStatusDot: Record<string, string> = {
-  ONLINE:  'bg-green-500',
-  AWAY:    'bg-yellow-400',
-  MEETING: 'bg-blue-500',
+  ONLINE:  'bg-status-resolved',
+  AWAY:    'bg-status-inprogress',
+  MEETING: 'bg-status-danger',
 }
 
 const agentStatusLabel: Record<string, string> = {
   ONLINE:  'Online',
   AWAY:    'Away',
-  MEETING: 'Busy',
+  MEETING: 'Meeting',
 }
 
-function OnlineAgentsList({ agents, isPending }: { agents: OnlineAgent[]; isPending: boolean }) {
-  if (isPending) return <Skeleton className="h-32 w-full rounded-xl" />
+function OnlineAgentsList({
+  agents,
+  isPending,
+  isError,
+  onRetry,
+}: {
+  agents: OnlineAgent[]
+  isPending: boolean
+  isError: boolean
+  onRetry: () => void
+}) {
+  if (isPending) {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-16 w-full rounded-xl" />)}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <ErrorState
+        className="min-h-36"
+        title="Agent presence unavailable"
+        description="Current agent availability could not be loaded."
+        action={<Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>}
+      />
+    )
+  }
 
   if (agents.length === 0) {
-    return <p className="text-sm text-muted-foreground">No agents are currently online.</p>
+    return <EmptyState className="min-h-36" title="No agents are currently online." icon={<UserRound aria-hidden="true" className="size-5" />} />
   }
 
   return (
@@ -315,13 +541,19 @@ function OnlineAgentsList({ agents, isPending }: { agents: OnlineAgent[]; isPend
       {agents.map(agent => (
         <div
           key={agent.id}
-          className="flex items-center gap-3 rounded-xl border bg-white px-4 py-3"
+          className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-e1"
         >
-          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${agentStatusDot[agent.online_status] ?? 'bg-gray-400'}`} />
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-label font-semibold text-foreground">
+            {agent.name.trim().charAt(0).toUpperCase()}
+          </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-gray-900">{agent.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{agentStatusLabel[agent.online_status]}</p>
+            <p className="truncate text-label font-semibold text-foreground">{agent.name}</p>
+            <p className="mt-0.5 flex items-center gap-1.5 truncate text-caption text-muted-foreground">
+              <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${agentStatusDot[agent.online_status] ?? 'bg-muted-foreground'}`} />
+              {agentStatusLabel[agent.online_status]}
+            </p>
           </div>
+          <span className="ml-auto hidden truncate text-caption text-muted-foreground sm:block">{agent.email}</span>
         </div>
       ))}
     </div>
@@ -331,7 +563,12 @@ function OnlineAgentsList({ agents, isPending }: { agents: OnlineAgent[]; isPend
 // ─── Admin dashboard ──────────────────────────────────────────────────────────
 
 function AdminDashboard() {
-  const { data: stats, isPending: statsPending } = useQuery<AdminStats>({
+  const {
+    data: stats,
+    isPending: statsPending,
+    isError: statsError,
+    refetch: refetchStats,
+  } = useQuery<AdminStats>({
     queryKey: ['ticketStats'],
     queryFn: async () => {
       const { data } = await axios.get('/api/tickets/stats')
@@ -342,7 +579,12 @@ function AdminDashboard() {
     refetchOnWindowFocus: true,
   })
 
-  const { data: chart, isPending: chartPending } = useQuery<AdminChartData>({
+  const {
+    data: chart,
+    isPending: chartPending,
+    isError: chartError,
+    refetch: refetchChart,
+  } = useQuery<AdminChartData>({
     queryKey: ['ticketChart', 'admin'],
     queryFn: async () => {
       const { data } = await axios.get('/api/tickets/chart')
@@ -361,74 +603,69 @@ function AdminDashboard() {
     : []
 
   const statCards = [
-    { icon: Ticket,        label: 'Total Tickets',      value: stats?.total            ?? 0, iconClass: 'bg-blue-100 text-blue-600',    accent: 'border-l-cyan-500'    },
-    { icon: Clock,         label: 'Ongoing Tickets',    value: stats?.ongoing          ?? 0, iconClass: 'bg-amber-100 text-amber-600',  accent: 'border-l-amber-500'   },
-    { icon: Brain,         label: 'Resolved by AI',     value: stats?.resolvedByAI     ?? 0, iconClass: 'bg-purple-100 text-purple-600', accent: 'border-l-purple-500'  },
-    { icon: CheckCircle2,  label: 'Resolved by Agents', value: stats?.resolvedByAgents ?? 0, iconClass: 'bg-green-100 text-green-600',  accent: 'border-l-emerald-500' },
-    { icon: AlertTriangle, label: 'Critical Tickets',   value: stats?.critical         ?? 0, iconClass: 'bg-red-100 text-red-600',      accent: 'border-l-red-500'     },
+    { icon: Ticket, label: 'Total Tickets', value: stats?.total ?? 0, detail: 'Across the support queue', tone: 'bg-primary/10 text-primary', accent: 'before:bg-primary' },
+    { icon: Clock, label: 'Ongoing Tickets', value: stats?.ongoing ?? 0, detail: shareOf(stats?.ongoing ?? 0, stats?.total ?? 0), tone: 'bg-status-inprogress-soft text-status-inprogress', accent: 'before:bg-status-inprogress' },
+    { icon: Brain, label: 'Resolved by AI', value: stats?.resolvedByAI ?? 0, detail: shareOf(stats?.resolvedByAI ?? 0, stats?.total ?? 0), tone: 'bg-status-ai-resolved-soft text-status-ai-resolved', accent: 'before:bg-status-ai-resolved' },
+    { icon: CheckCircle2, label: 'Resolved by Agents', value: stats?.resolvedByAgents ?? 0, detail: shareOf(stats?.resolvedByAgents ?? 0, stats?.total ?? 0), tone: 'bg-status-resolved-soft text-status-resolved', accent: 'before:bg-status-resolved' },
+    { icon: AlertTriangle, label: 'Critical Tickets', value: stats?.critical ?? 0, detail: 'High priority, unresolved', tone: 'bg-status-danger-soft text-status-danger', accent: 'before:bg-status-danger' },
   ]
 
   return (
     <div className="space-y-6">
-      {/* Activity chart */}
+      <section aria-label="Ticket overview">
+        {statsError ? (
+          <ErrorState
+            className="min-h-32"
+            title="Ticket overview unavailable"
+            description="Dashboard totals could not be loaded."
+            action={<Button variant="outline" size="sm" onClick={() => void refetchStats()}>Try again</Button>}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+            {statsPending
+              ? <StatSkeletons count={5} />
+              : statCards.map(item => <StatCard key={item.label} {...item} />)}
+          </div>
+        )}
+      </section>
+
       {chartPending ? (
-        <ChartSkeleton />
+        <ChartSkeleton title="Ticket Activity — Last 30 Days" />
+      ) : chartError ? (
+        <ErrorState
+          title="Activity chart unavailable"
+          description="Ticket activity for the last 30 days could not be loaded."
+          action={<Button variant="outline" size="sm" onClick={() => void refetchChart()}>Try again</Button>}
+        />
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Ticket Activity — Last 30 Days</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={chartPoints} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <defs>
-                  {Object.entries(CHART_COLORS).map(([key, color]) => (
-                    <linearGradient key={key} id={`fill-${key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={color} stopOpacity={0.08} />
-                      <stop offset="95%" stopColor={color} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} interval={4} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} cursor={{ stroke: '#e2e8f0' }} />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
-                <Area dataKey="Received"             type="monotone" stroke={CHART_COLORS.received}         strokeWidth={2} fill="url(#fill-received)"         dot={false} activeDot={{ r: 4 }} />
-                <Area dataKey="Resolved"             type="monotone" stroke={CHART_COLORS.resolved}         strokeWidth={2} fill="url(#fill-resolved)"         dot={false} activeDot={{ r: 4 }} />
-                <Area dataKey="Resolved by AI"       type="monotone" stroke={CHART_COLORS.resolvedByAI}    strokeWidth={2} fill="url(#fill-resolvedByAI)"    dot={false} activeDot={{ r: 4 }} />
-                <Area dataKey="Resolved by Agents"   type="monotone" stroke={CHART_COLORS.resolvedByAgents} strokeWidth={2} fill="url(#fill-resolvedByAgents)" dot={false} activeDot={{ r: 4 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ActivityChart
+          title="Ticket Activity — Last 30 Days"
+          description="Incoming volume and resolution ownership"
+          data={chartPoints}
+          series={ADMIN_CHART_SERIES}
+        />
       )}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        {statsPending
-          ? <StatSkeletons count={5} />
-          : statCards.map(s => <StatCard key={s.label} {...s} />)}
-      </div>
-
-      {/* New Tickets */}
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-gray-900">New Tickets</h2>
+      <section>
+        <h2 className="mb-3 text-body-lg font-semibold tracking-tight text-foreground">New Tickets</h2>
         <TicketSlideshow
           tickets={stats?.openTickets ?? []}
           isPending={statsPending}
+          isError={statsError}
+          onRetry={() => void refetchStats()}
           emptyMessage="No open tickets at the moment."
         />
-      </div>
+      </section>
 
-      {/* Online Agents */}
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-gray-900">Online Agents</h2>
+      <section>
+        <h2 className="mb-3 text-body-lg font-semibold tracking-tight text-foreground">Online Agents</h2>
         <OnlineAgentsList
           agents={stats?.onlineAgents ?? []}
           isPending={statsPending}
+          isError={statsError}
+          onRetry={() => void refetchStats()}
         />
-      </div>
+      </section>
     </div>
   )
 }
@@ -438,7 +675,12 @@ function AdminDashboard() {
 function AgentDashboard({ userId }: { userId: string }) {
   const viewedIds = getRecentViewIds(userId)
 
-  const { data: statsData, isPending: statsPending } = useQuery<AgentStats>({
+  const {
+    data: statsData,
+    isPending: statsPending,
+    isError: statsError,
+    refetch: refetchStats,
+  } = useQuery<AgentStats>({
     queryKey: ['ticketStats'],
     queryFn: async () => {
       const { data } = await axios.get('/api/tickets/stats')
@@ -446,7 +688,12 @@ function AgentDashboard({ userId }: { userId: string }) {
     },
   })
 
-  const { data: chart, isPending: chartPending } = useQuery<AgentChartData>({
+  const {
+    data: chart,
+    isPending: chartPending,
+    isError: chartError,
+    refetch: refetchChart,
+  } = useQuery<AgentChartData>({
     queryKey: ['ticketChart', 'agent'],
     queryFn: async () => {
       const { data } = await axios.get('/api/tickets/chart')
@@ -454,7 +701,12 @@ function AgentDashboard({ userId }: { userId: string }) {
     },
   })
 
-  const { data: recentViewed = [], isPending: recentPending } = useQuery<TicketCard[]>({
+  const {
+    data: recentViewed = [],
+    isPending: recentPending,
+    isError: recentError,
+    refetch: refetchRecent,
+  } = useQuery<TicketCard[]>({
     queryKey: ['recentViewed', viewedIds],
     queryFn: async () => {
       if (viewedIds.length === 0) return []
@@ -473,86 +725,69 @@ function AgentDashboard({ userId }: { userId: string }) {
     : []
 
   const statCards = [
-    { icon: Ticket,       label: 'Total Tickets',    value: statsData?.total          ?? 0, iconClass: 'bg-blue-100 text-blue-600',    accent: 'border-l-cyan-500'    },
-    { icon: Inbox,        label: 'New Tickets',       value: statsData?.new            ?? 0, iconClass: 'bg-indigo-100 text-indigo-600', accent: 'border-l-indigo-500'  },
-    { icon: Clock,        label: 'Ongoing Tickets',   value: statsData?.ongoing        ?? 0, iconClass: 'bg-amber-100 text-amber-600',  accent: 'border-l-amber-500'   },
-    { icon: CheckCircle2, label: 'Resolved / Closed', value: statsData?.resolvedClosed ?? 0, iconClass: 'bg-green-100 text-green-600',  accent: 'border-l-emerald-500' },
+    { icon: Ticket, label: 'Total Tickets', value: statsData?.total ?? 0, detail: 'Assigned to you', tone: 'bg-primary/10 text-primary', accent: 'before:bg-primary' },
+    { icon: Inbox, label: 'New Tickets', value: statsData?.new ?? 0, detail: shareOf(statsData?.new ?? 0, statsData?.total ?? 0), tone: 'bg-status-open-soft text-status-open', accent: 'before:bg-status-open' },
+    { icon: Clock, label: 'Ongoing Tickets', value: statsData?.ongoing ?? 0, detail: shareOf(statsData?.ongoing ?? 0, statsData?.total ?? 0), tone: 'bg-status-inprogress-soft text-status-inprogress', accent: 'before:bg-status-inprogress' },
+    { icon: CheckCircle2, label: 'Resolved / Closed', value: statsData?.resolvedClosed ?? 0, detail: shareOf(statsData?.resolvedClosed ?? 0, statsData?.total ?? 0), tone: 'bg-status-resolved-soft text-status-resolved', accent: 'before:bg-status-resolved' },
   ]
 
   return (
     <div className="space-y-6">
-      {/* Line chart */}
+      <section aria-label="Ticket overview">
+        {statsError ? (
+          <ErrorState
+            className="min-h-32"
+            title="Ticket overview unavailable"
+            description="Your ticket totals could not be loaded."
+            action={<Button variant="outline" size="sm" onClick={() => void refetchStats()}>Try again</Button>}
+          />
+        ) : (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {statsPending
+              ? <StatSkeletons count={4} />
+              : statCards.map(item => <StatCard key={item.label} {...item} />)}
+          </div>
+        )}
+      </section>
+
       {chartPending ? (
-        <ChartSkeleton />
+        <ChartSkeleton title="Your Ticket Activity — Last 30 Days" />
+      ) : chartError ? (
+        <ErrorState
+          title="Activity chart unavailable"
+          description="Your ticket activity for the last 30 days could not be loaded."
+          action={<Button variant="outline" size="sm" onClick={() => void refetchChart()}>Try again</Button>}
+        />
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Your Ticket Activity — Last 30 Days</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={chartPoints} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="fill-rcv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_COLORS.received} stopOpacity={0.08} />
-                    <stop offset="95%" stopColor={CHART_COLORS.received} stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="fill-res" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_COLORS.resolved} stopOpacity={0.08} />
-                    <stop offset="95%" stopColor={CHART_COLORS.resolved} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={4}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  tickLine={false}
-                  axisLine={false}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }}
-                  cursor={{ stroke: '#e2e8f0' }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
-                <Area dataKey="Received"           type="monotone" stroke={CHART_COLORS.received} strokeWidth={2} fill="url(#fill-rcv)" dot={false} activeDot={{ r: 4 }} />
-                <Area dataKey="Resolved / Closed"  type="monotone" stroke={CHART_COLORS.resolved} strokeWidth={2} fill="url(#fill-res)" dot={false} activeDot={{ r: 4 }} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        <ActivityChart
+          title="Your Ticket Activity — Last 30 Days"
+          description="Tickets received and completed in your queue"
+          data={chartPoints}
+          series={AGENT_CHART_SERIES}
+        />
       )}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {statsPending
-          ? <StatSkeletons count={4} />
-          : statCards.map(s => <StatCard key={s.label} {...s} />)}
-      </div>
-
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-gray-900">New Tickets</h2>
+      <section>
+        <h2 className="mb-3 text-body-lg font-semibold tracking-tight text-foreground">New Tickets</h2>
         <TicketSlideshow
           tickets={statsData?.openTickets ?? []}
           isPending={statsPending}
+          isError={statsError}
+          onRetry={() => void refetchStats()}
           emptyMessage="No open tickets assigned to you."
         />
-      </div>
+      </section>
 
-      <div>
-        <h2 className="mb-3 text-base font-semibold text-gray-900">Recent Tickets</h2>
+      <section>
+        <h2 className="mb-3 text-body-lg font-semibold tracking-tight text-foreground">Recent Tickets</h2>
         <TicketSlideshow
           tickets={viewedIds.length === 0 ? [] : recentViewed}
           isPending={viewedIds.length > 0 && recentPending}
+          isError={viewedIds.length > 0 && recentError}
+          onRetry={() => void refetchRecent()}
           emptyMessage="No recently viewed tickets."
         />
-      </div>
+      </section>
     </div>
   )
 }
@@ -708,39 +943,40 @@ export default function Home() {
   const shownEmail = displayEmail ?? user?.email ?? ''
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Navbar />
-      <main className="max-w-5xl mx-auto px-6 py-10">
-        <div className="mb-8 flex items-start justify-between">
+    <div>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-h1 font-semibold tracking-tight text-foreground">
               Welcome back, {shownName}
             </h1>
-            <p className="mt-1 text-sm text-gray-500">{shownEmail}</p>
+            <p className="mt-1 text-body text-muted-foreground">{shownEmail}</p>
           </div>
           {!isAdmin && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setSettingsOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
             >
-              <Settings className="h-4 w-4" />
+              <Settings aria-hidden="true" />
               Settings
-            </button>
+            </Button>
           )}
         </div>
 
         {sessionPending ? (
-          <div className="grid grid-cols-3 gap-4">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-xl" />
-            ))}
+          <div className="space-y-6" aria-label="Loading dashboard">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatSkeletons count={4} />
+            </div>
+            <ChartSkeleton title="Ticket Activity — Last 30 Days" />
           </div>
         ) : isAdmin ? (
           <AdminDashboard />
         ) : (
           <AgentDashboard userId={userId} />
         )}
-      </main>
+      </div>
 
       {settingsOpen && user && (
         <AgentSettingsModal

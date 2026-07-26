@@ -1,17 +1,21 @@
 {
   "name": "helpdesk-frontend",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "packageManager": "npm@10.9.8",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test:component": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cf:deploy": "vite build && wrangler deploy",
+    "cf:dev": "wrangler dev"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/geist": "^5.2.9",
+    "@fontsource-variable/geist-mono": "^5.3.0",
     "@hookform/resolvers": "^5.4.0",
     "@sentry/react": "^10.60.0",
     "@sentry/vite-plugin": "^5.3.0",
@@ -33,6 +37,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260724.1",
     "@playwright/test": "^1.61.0",
     "@tailwindcss/vite": "^4.1.0",
     "@testing-library/jest-dom": "^6.9.1",
@@ -47,6 +52,7 @@
     "tailwindcss": "^4.1.0",
     "typescript": "^5.7.2",
     "vite": "^6.3.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "wrangler": "^4.114.0"
   }
 }

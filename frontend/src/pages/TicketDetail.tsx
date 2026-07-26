@@ -3,15 +3,27 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { trackRecentView } from '../lib/recentViews'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
+import ReactMarkdown from 'react-markdown'
 import { ArrowLeft, Brain, Sparkles, User } from 'lucide-react'
-import Navbar from '../components/Navbar'
 import { Skeleton } from '../components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { StatusBadge, type TicketStatus } from '@/components/ui/status-badge'
+import { PriorityBadge, type TicketPriority } from '@/components/ui/priority-badge'
+import { CategoryBadge, type TicketCategory } from '@/components/ui/category-badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { authClient } from '../lib/auth-client'
 
-type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'AI_PROCESSING' | 'AI_RESOLVED'
-type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
-type TicketCategory = 'ACCOUNT' | 'INQUIRY' | 'PAYMENT' | 'TECHNICAL' | 'VOUCHER' | 'OTHER' | 'DELIVERY' | 'MENU'
+type Priority = TicketPriority
 type SenderType = 'CUSTOMER' | 'AGENT' | 'AI'
 
 type Agent = { id: string; name: string; email: string }
@@ -56,15 +68,6 @@ async function fetchAgents(): Promise<Agent[]> {
   return data
 }
 
-const statusStyles: Record<TicketStatus, string> = {
-  OPEN: 'bg-blue-100 text-blue-700',
-  IN_PROGRESS: 'bg-amber-100 text-amber-700',
-  RESOLVED: 'bg-green-100 text-green-700',
-  CLOSED: 'bg-gray-100 text-gray-600',
-  AI_PROCESSING: 'bg-purple-100 text-purple-700',
-  AI_RESOLVED: 'bg-emerald-100 text-emerald-700',
-}
-
 const statusLabels: Record<TicketStatus, string> = {
   OPEN: 'Open',
   IN_PROGRESS: 'In Progress',
@@ -74,25 +77,23 @@ const statusLabels: Record<TicketStatus, string> = {
   AI_RESOLVED: 'AI Resolved',
 }
 
-const senderStyles: Record<SenderType, { bubble: string; label: string; align: string }> = {
-  CUSTOMER: { bubble: 'bg-white border border-slate-200 text-gray-800', label: 'Customer', align: 'items-start' },
-  AGENT:    { bubble: 'bg-blue-600 text-white',                         label: 'Agent',    align: 'items-end'   },
-  AI:       { bubble: 'bg-purple-600 text-white',                        label: 'AI',       align: 'items-end'   },
+const senderStyles: Record<SenderType, { bubble: string; label: string; align: string; avatar: string }> = {
+  CUSTOMER: { bubble: 'border-border bg-card text-foreground', label: 'Customer', align: 'items-start', avatar: 'bg-status-open-soft text-status-open' },
+  AGENT: { bubble: 'border-primary/15 bg-primary/10 text-foreground', label: 'Agent', align: 'items-end', avatar: 'bg-primary/10 text-primary' },
+  AI: { bubble: 'border-status-ai-resolved/15 bg-status-ai-resolved-soft text-foreground', label: 'AI', align: 'items-end', avatar: 'bg-status-ai-resolved-soft text-status-ai-resolved' },
 }
 
-const categoryLabels: Record<TicketCategory, string> = {
-  ACCOUNT:   'Account',
-  INQUIRY:   'Inquiry',
-  PAYMENT:   'Payments',
-  DELIVERY:  'Delivery',
-  MENU:      'Menu',
-  TECHNICAL: 'Technical',
-  VOUCHER:   'Voucher',
-  OTHER:     'Others',
+const statusRail: Record<TicketStatus, string> = {
+  OPEN: 'border-l-status-open',
+  IN_PROGRESS: 'border-l-status-inprogress',
+  RESOLVED: 'border-l-status-resolved',
+  CLOSED: 'border-l-status-resolved',
+  AI_PROCESSING: 'border-l-status-ai-resolved',
+  AI_RESOLVED: 'border-l-status-ai-resolved',
 }
 
 const selectClass =
-  'w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
+  'h-9 w-full rounded-lg border border-input bg-card px-3 text-label text-foreground shadow-e1 outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 motion-reduce:transition-none'
 
 export default function TicketDetail() {
   const { id } = useParams<{ id: string }>()
@@ -102,7 +103,7 @@ export default function TicketDetail() {
   const { data: session } = authClient.useSession()
   const isAdmin = (session?.user as { role?: string } | undefined)?.role === 'ADMIN'
 
-  const { data: ticket, isPending, error } = useQuery({
+  const { data: ticket, isPending, error, refetch } = useQuery({
     queryKey: ['tickets', id],
     queryFn: () => fetchTicket(id!),
     enabled: !!id,
@@ -243,123 +244,160 @@ export default function TicketDetail() {
      && assignedToId === (ticket.assigned_to?.id ?? null))
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Navbar />
-      <main className="max-w-5xl mx-auto px-6 py-10">
-        <button
+    <div>
+      <div className="mx-auto max-w-7xl">
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => navigate('/tickets')}
-          className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors mb-6"
+          className="mb-4 -ml-2 text-muted-foreground"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft aria-hidden="true" />
           Back to Tickets
-        </button>
+        </Button>
 
         {isPending && (
-          <div className="grid grid-cols-[1fr_280px] gap-6">
-            <div className="space-y-4">
-              <Skeleton className="h-7 w-96" />
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-64 w-full rounded-lg" />
+          <div className="space-y-5" aria-label="Loading ticket">
+            <Card className="border-l-4 border-l-transparent">
+              <CardHeader className="space-y-3">
+                <Skeleton className="h-7 w-2/3" />
+                <Skeleton className="h-4 w-48" />
+              </CardHeader>
+            </Card>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
+              <Card>
+                <CardHeader><Skeleton className="h-5 w-24" /></CardHeader>
+                <CardContent className="space-y-4">
+                  <Skeleton className="h-24 w-4/5 rounded-xl" />
+                  <Skeleton className="ml-auto h-20 w-3/5 rounded-xl" />
+                </CardContent>
+              </Card>
+              <div className="space-y-4">
+                <Skeleton className="h-64 w-full rounded-xl" />
+                <Skeleton className="h-56 w-full rounded-xl" />
+              </div>
             </div>
-            <Skeleton className="h-72 w-full rounded-lg" />
           </div>
         )}
 
-        {error && <p className="text-sm text-red-600">{error.message}</p>}
+        {error ? (
+          <ErrorState
+            title="Ticket unavailable"
+            description={error.message}
+            action={<Button variant="outline" size="sm" onClick={() => void refetch()}>Try again</Button>}
+          />
+        ) : null}
 
         {ticket && (
-          <div className="grid grid-cols-[1fr_280px] gap-6 items-start">
+          <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_19rem]">
 
             {/* ── Left: header + thread + reply ── */}
             <div className="space-y-6">
 
               {/* Header */}
-              <div className="bg-white rounded-lg border border-gray-200 p-5">
-                <div className="flex items-start justify-between gap-4">
+              <Card className={`border-l-4 ${statusRail[ticket.status]}`}>
+                <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <h1 className="text-xl font-semibold text-gray-900 truncate">{ticket.subject}</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">
-                      From{' '}
-                      <span className="font-medium text-gray-700">{ticket.customer_name}</span>
-                      {' '}·{' '}
-                      <a href={`mailto:${ticket.customer_email}`} className="hover:underline">
-                        {ticket.customer_email}
-                      </a>
-                    </p>
+                    <div className="tabular mb-2 text-caption text-muted-foreground">#{ticket.id}</div>
+                    <h1 className="text-h2 font-semibold tracking-tight text-foreground">{ticket.subject}</h1>
                   </div>
-                  <span className={`shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${statusStyles[ticket.status]}`}>
-                    {statusLabels[ticket.status]}
-                  </span>
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-500">
-                  {ticket.priority && (
-                    <span>Priority: <span className="font-medium text-gray-700">{ticket.priority}</span></span>
-                  )}
-                  {ticket.category && (
-                    <span>Category: <span className="font-medium text-gray-700">{categoryLabels[ticket.category]}</span></span>
-                  )}
-                  <span>Assigned: <span className="font-medium text-gray-700">{ticket.assigned_to?.name ?? 'Unassigned'}</span></span>
-                  <span>Opened: <span className="font-medium text-gray-700">{new Date(ticket.created_at).toLocaleString()}</span></span>
-                </div>
-              </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <StatusBadge status={ticket.status} />
+                    {ticket.priority ? <PriorityBadge priority={ticket.priority} /> : null}
+                    {ticket.category ? <CategoryBadge category={ticket.category} /> : null}
+                  </div>
+                </CardHeader>
+                <CardContent className="border-t border-border pt-4 text-caption text-muted-foreground">
+                  <span className="tabular">Opened {new Date(ticket.created_at).toLocaleString()}</span>
+                </CardContent>
+              </Card>
 
               {/* Thread */}
-              <div>
-                <h2 className="text-sm font-medium text-gray-500 mb-3 uppercase tracking-wide">
-                  Thread ({ticket.messages.length})
-                </h2>
-                <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+              <Card>
+                <CardHeader className="border-b border-border pb-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-body-lg font-semibold tracking-tight text-foreground">Thread ({ticket.messages.length})</h2>
+                    <span className="text-caption text-muted-foreground">Conversation history</span>
+                  </div>
+                </CardHeader>
+                <CardContent>
                   {ticket.messages.length === 0 ? (
-                    <p className="text-sm text-gray-400">No messages yet.</p>
+                    <EmptyState className="min-h-40 border-0 bg-transparent" title="No messages yet." />
                   ) : (
-                    ticket.messages.map((msg) => {
-                      const style = senderStyles[msg.sender_type]
-                      return (
-                        <div key={msg.id} className={`flex flex-col ${style.align}`}>
-                          <div className={`max-w-[80%] rounded-2xl px-4 py-3 ${style.bubble}`}>
-                            <p className="text-sm whitespace-pre-wrap">{msg.body}</p>
-                          </div>
-                          <p className="mt-1 text-xs text-gray-400 px-1">
-                            {style.label} · {new Date(msg.sent_at).toLocaleString()}
-                          </p>
-                        </div>
-                      )
-                    })
+                    <ol aria-label="Conversation thread" className="max-h-[560px] space-y-5 overflow-y-auto pr-1">
+                      {ticket.messages.map((msg) => {
+                        const style = senderStyles[msg.sender_type]
+                        return (
+                          <li key={msg.id} className={`flex flex-col ${style.align}`}>
+                            <div className={`mb-1.5 flex items-center gap-2 ${msg.sender_type === 'CUSTOMER' ? '' : 'flex-row-reverse'}`}>
+                              <span className={`flex size-7 items-center justify-center rounded-full ${style.avatar}`}>
+                                {msg.sender_type === 'AI' ? <Brain aria-hidden="true" className="size-3.5" /> : <User aria-hidden="true" className="size-3.5" />}
+                              </span>
+                              <span className="text-caption font-medium text-foreground">{style.label}</span>
+                            </div>
+                            <article className={`max-w-[88%] rounded-xl border px-4 py-3 shadow-e1 sm:max-w-[78%] ${style.bubble}`}>
+                              <ReactMarkdown
+                                components={{
+                                  a: ({ children, ...props }) => <a {...props} className="font-medium text-primary underline underline-offset-2">{children}</a>,
+                                  p: ({ children }) => <p className="whitespace-pre-wrap text-body leading-relaxed last:mb-0">{children}</p>,
+                                  ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-body">{children}</ul>,
+                                  ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-body">{children}</ol>,
+                                }}
+                              >
+                                {msg.body}
+                              </ReactMarkdown>
+                            </article>
+                            <time dateTime={msg.sent_at} className="tabular mt-1.5 px-1 text-caption text-muted-foreground">
+                              {new Date(msg.sent_at).toLocaleString()}
+                            </time>
+                          </li>
+                        )
+                      })}
+                    </ol>
                   )}
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
               {/* Reply — agents only */}
               {!isAdmin && (
-                <div className="bg-white rounded-lg border border-gray-200 p-5">
-                  <h2 className="text-sm font-medium text-gray-700 mb-3">Reply</h2>
-                  <textarea
-                    value={replyBody}
-                    onChange={e => { setReplyBody(e.target.value); localStorage.setItem(draftKey, e.target.value) }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && replyBody.trim()) {
-                        replyMutation.mutate(replyBody.trim())
-                      }
-                    }}
-                    placeholder="Write your reply…"
-                    rows={4}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  />
-                  {replyError && <p className="mt-1.5 text-sm text-red-600">{replyError}</p>}
-                  {polishError && <p className="mt-1.5 text-sm text-red-600">{polishError}</p>}
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-xs text-gray-400">Ctrl + Enter to send</p>
-                    <div className="flex items-center gap-2">
+                <Card>
+                  <CardHeader className="border-b border-border pb-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-body-lg font-semibold tracking-tight text-foreground">Reply</h2>
+                      <span className="text-caption text-muted-foreground">Draft saved locally</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <label htmlFor="ticket-reply" className="sr-only">Reply message</label>
+                    <textarea
+                      id="ticket-reply"
+                      value={replyBody}
+                      onChange={e => { setReplyBody(e.target.value); localStorage.setItem(draftKey, e.target.value) }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && replyBody.trim()) {
+                          replyMutation.mutate(replyBody.trim())
+                        }
+                      }}
+                      placeholder="Write your reply…"
+                      rows={6}
+                      className="w-full resize-y rounded-xl border border-input bg-background px-3.5 py-3 text-body text-foreground shadow-inner outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 motion-reduce:transition-none"
+                    />
+                    {replyError ? <p role="alert" className="mt-2 text-label text-status-danger">{replyError}</p> : null}
+                    {polishError ? <p role="alert" className="mt-2 text-label text-status-danger">{polishError}</p> : null}
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="tabular text-caption text-muted-foreground">Ctrl + Enter to send</p>
+                      <div className="flex items-center justify-end gap-2">
                       <Button
                         variant="outline"
+                        loading={isPolishing}
                         onClick={handlePolish}
                         disabled={isPolishing || replyMutation.isPending || !replyBody.trim()}
                       >
-                        <Sparkles className="h-3.5 w-3.5" />
+                        <Sparkles aria-hidden="true" />
                         {isPolishing ? 'Polishing…' : 'Polish'}
                       </Button>
                       <Button
+                        loading={replyMutation.isPending}
                         onClick={() => replyMutation.mutate(replyBody.trim())}
                         disabled={replyMutation.isPending || isPolishing || !replyBody.trim()}
                       >
@@ -367,40 +405,75 @@ export default function TicketDetail() {
                       </Button>
                     </div>
                   </div>
-                </div>
+                  </CardContent>
+                </Card>
               )}
             </div>
 
             {/* ── Right: update panel + summary ── */}
-            <div className="space-y-4">
-            <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-4">
-              <h2 className="text-sm font-medium text-gray-700">Update Ticket</h2>
+            <aside aria-label="Ticket details" className="space-y-4 lg:sticky lg:top-20">
+            <Card size="sm" className={`border-l-4 ${statusRail[ticket.status]}`}>
+              <CardHeader>
+                <h2 className="text-body-lg font-semibold tracking-tight text-foreground">Ticket Details</h2>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  <StatusBadge status={ticket.status} />
+                  {ticket.priority ? <PriorityBadge priority={ticket.priority} /> : null}
+                  {ticket.category ? <CategoryBadge category={ticket.category} /> : null}
+                </div>
+                <dl className="space-y-3 border-t border-border pt-4">
+                  <div>
+                    <dt className="text-caption text-muted-foreground">Customer</dt>
+                    <dd className="mt-0.5 text-label font-medium text-foreground">{ticket.customer_name}</dd>
+                    <dd className="mt-0.5 truncate text-caption text-muted-foreground">
+                      <a href={`mailto:${ticket.customer_email}`} className="rounded-sm outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring">{ticket.customer_email}</a>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-caption text-muted-foreground">Assigned to</dt>
+                    <dd className="mt-0.5 text-label font-medium text-foreground">{ticket.assigned_to?.name ?? 'Unassigned'}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-caption text-muted-foreground">Opened</dt>
+                    <dd className="tabular mt-0.5 text-caption text-foreground">{new Date(ticket.created_at).toLocaleString()}</dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+
+            <Card size="sm">
+              <CardHeader>
+                <h2 className="text-body-lg font-semibold tracking-tight text-foreground">Update Ticket</h2>
+              </CardHeader>
+              <CardContent className="space-y-4">
 
               {/* Agent — admin only, button opens modal; selection is staged until Save Changes */}
               {isAdmin && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-gray-500">Agent</span>
-                  <button
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-caption font-medium text-muted-foreground">Agent</span>
+                  <Button
+                    variant="outline"
                     onClick={() => setAgentModal(true)}
-                    className="w-full text-left text-sm border border-gray-300 rounded-md px-2.5 py-1.5 bg-white hover:bg-gray-50 transition-colors text-gray-800 truncate flex items-center gap-1.5"
+                    className="w-full justify-start overflow-hidden"
                   >
                     {(() => {
                       if (!assignedToId) {
-                        return <span className="text-gray-400">Unassigned</span>
+                        return <span className="text-muted-foreground">Unassigned</span>
                       }
                       const pendingAgent = agents.find(a => a.id === assignedToId)
                       if (pendingAgent) {
-                        return <><User className="h-3.5 w-3.5 shrink-0 text-gray-500" /><span>{pendingAgent.name}</span></>
+                        return <><User aria-hidden="true" className="text-muted-foreground" /><span className="truncate">{pendingAgent.name}</span></>
                       }
                       // ID set but not in agents list → AI agent
-                      return <><Brain className="h-3.5 w-3.5 shrink-0 text-purple-500" /><span>{ticket.assigned_to?.name ?? 'AI Agent'}</span></>
+                      return <><Brain aria-hidden="true" className="text-status-ai-resolved" /><span className="truncate">{ticket.assigned_to?.name ?? 'AI Agent'}</span></>
                     })()}
-                  </button>
+                  </Button>
                 </div>
               )}
 
-              <div className="flex flex-col gap-1">
-                <label htmlFor="td-status" className="text-xs text-gray-500">Status</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="td-status" className="text-caption font-medium text-muted-foreground">Status</label>
                 <select
                   id="td-status"
                   value={status}
@@ -419,8 +492,8 @@ export default function TicketDetail() {
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label htmlFor="td-priority" className="text-xs text-gray-500">Priority</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="td-priority" className="text-caption font-medium text-muted-foreground">Priority</label>
                 <select
                   id="td-priority"
                   value={priority}
@@ -434,8 +507,8 @@ export default function TicketDetail() {
                 </select>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label htmlFor="td-category" className="text-xs text-gray-500">Category</label>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="td-category" className="text-caption font-medium text-muted-foreground">Category</label>
                 <select
                   id="td-category"
                   value={category}
@@ -454,91 +527,86 @@ export default function TicketDetail() {
                 </select>
               </div>
 
-              {updateError && <p className="text-sm text-red-600">{updateError}</p>}
+              {updateError ? <p role="alert" className="text-label text-status-danger">{updateError}</p> : null}
 
               <Button
+                loading={mutation.isPending}
                 onClick={handleUpdate}
                 disabled={mutation.isPending || nothingChanged}
                 className="w-full"
               >
                 {mutation.isPending ? 'Saving…' : 'Save Changes'}
               </Button>
-            </div>
+              </CardContent>
+            </Card>
 
             {/* Summary — agents only */}
             {!isAdmin && (
-              <div className="bg-white rounded-lg border border-gray-200 p-5 space-y-3">
-                <h2 className="text-sm font-medium text-gray-700">Ticket Summary</h2>
-                {summary ? (
-                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{summary}</p>
-                ) : (
-                  <p className="text-sm text-gray-400">No summary generated yet.</p>
-                )}
-                {summaryError && <p className="text-sm text-red-600">{summaryError}</p>}
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handleSummarize}
-                  disabled={isSummarizing}
-                >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {isSummarizing ? 'Summarizing…' : summary ? 'Regenerate Summary' : 'Generate Summary'}
-                </Button>
-              </div>
+              <Card size="sm">
+                <CardHeader>
+                  <h2 className="text-body-lg font-semibold tracking-tight text-foreground">Ticket Summary</h2>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {summary ? (
+                    <p className="whitespace-pre-wrap text-body leading-relaxed text-foreground">{summary}</p>
+                  ) : (
+                    <p className="text-body text-muted-foreground">No summary generated yet.</p>
+                  )}
+                  {summaryError ? <p role="alert" className="text-label text-status-danger">{summaryError}</p> : null}
+                  <Button
+                    variant="outline"
+                    loading={isSummarizing}
+                    className="w-full"
+                    onClick={handleSummarize}
+                    disabled={isSummarizing}
+                  >
+                    <Sparkles aria-hidden="true" />
+                    {isSummarizing ? 'Summarizing…' : summary ? 'Regenerate Summary' : 'Generate Summary'}
+                  </Button>
+                </CardContent>
+              </Card>
             )}
-            </div>
+            </aside>
 
           </div>
         )}
-      </main>
+      </div>
 
       {/* Agent assignment modal */}
       {agentModal && ticket && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setAgentModal(false)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-xl w-80 p-6"
-            onClick={e => e.stopPropagation()}
-          >
-            <h2 className="text-base font-semibold text-gray-900 mb-4">
-              {ticket.assigned_to ? 'Re-assign Agent' : 'Assign Agent'}
-            </h2>
+        <Dialog open onOpenChange={(open) => { if (!open) setAgentModal(false) }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{ticket.assigned_to ? 'Re-assign Agent' : 'Assign Agent'}</DialogTitle>
+              <DialogDescription>Select who should own this ticket, then save the ticket changes.</DialogDescription>
+            </DialogHeader>
 
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {assignedToId && (
-                <button
-                  onClick={() => { setAssignedToId(null); setAgentModal(false) }}
-                  className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
+            <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+              {assignedToId ? (
+                <Button variant="ghost" onClick={() => { setAssignedToId(null); setAgentModal(false) }} className="h-auto w-full justify-start px-3 py-2.5 text-left">
+                  <span className="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground"><User aria-hidden="true" /></span>
+                  <span><span className="block text-label font-semibold">Unassigned</span><span className="block text-caption font-normal text-muted-foreground">Remove current assignment</span></span>
+                </Button>
+              ) : null}
+              {agents.length === 0 ? <EmptyState className="min-h-36" title="No agents available." icon={<User aria-hidden="true" className="size-5" />} /> : null}
+              {agents.map(agent => (
+                <Button
+                  key={agent.id}
+                  variant="ghost"
+                  onClick={() => { setAssignedToId(agent.id); setAgentModal(false) }}
+                  className="h-auto w-full justify-start px-3 py-2.5 text-left"
                 >
-                  <p className="text-sm text-gray-800">Unassigned</p>
-                  <p className="text-xs text-gray-400">Remove current assignment</p>
-                </button>
-              )}
-              {agents.length === 0 && (
-                <p className="text-sm text-gray-400 px-3 py-2">No agents available.</p>
-              )}
-              {agents.map(a => (
-                <button
-                  key={a.id}
-                  onClick={() => { setAssignedToId(a.id); setAgentModal(false) }}
-                  className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <p className="text-sm text-gray-800">{a.name}</p>
-                  <p className="text-xs text-gray-400">{a.email}</p>
-                </button>
+                  <span className="flex size-8 items-center justify-center rounded-full bg-muted text-caption font-semibold text-foreground">{agent.name.trim().charAt(0).toUpperCase()}</span>
+                  <span className="min-w-0"><span className="block truncate text-label font-semibold">{agent.name}</span><span className="block truncate text-caption font-normal text-muted-foreground">{agent.email}</span></span>
+                </Button>
               ))}
             </div>
 
-            <button
-              onClick={() => setAgentModal(false)}
-              className="mt-4 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAgentModal(false)}>Cancel</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

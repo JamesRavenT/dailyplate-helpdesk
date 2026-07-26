@@ -1,13 +1,17 @@
 import { defineConfig, devices } from '@playwright/test'
 import path from 'path'
+import { ADMIN_STATE } from './tests/fixtures/auth'
 
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  retries: 2,
   workers: 1,
-  reporter: 'html',
+  reporter: [
+    ['html'],
+    ['allure-playwright', { resultsDir: 'allure-results', detail: true }],
+  ],
   globalSetup: './global-setup.ts',
   use: {
     baseURL: 'http://localhost:5173',
@@ -17,8 +21,26 @@ export default defineConfig({
     { name: 'setup', testMatch: /setup\/auth-setup\.ts/ },
     {
       name: 'chromium',
+      testIgnore: /(smoke|screenshots)\//,
       use: { ...devices['Desktop Chrome'] },
       dependencies: ['setup'],
+    },
+    {
+      name: 'screenshots',
+      testMatch: /screenshots\/.*\.spec\.ts/,
+      dependencies: ['setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1440, height: 900 },
+        storageState: ADMIN_STATE,
+      },
+    },
+    {
+      name: 'deploy-smoke',
+      testMatch: /smoke\/.*\.spec\.ts/,
+      use: {
+        baseURL: process.env.DEPLOYED_BASE_URL || 'http://localhost:5173',
+      },
     },
   ],
   webServer: [

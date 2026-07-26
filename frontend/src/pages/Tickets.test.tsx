@@ -7,7 +7,6 @@ import { authClient } from '../lib/auth-client'
 import Tickets from './Tickets'
 
 vi.mock('axios', () => ({ default: { get: vi.fn(), patch: vi.fn() } }))
-vi.mock('../components/Navbar', () => ({ default: () => <nav /> }))
 vi.mock('../lib/auth-client', () => ({ authClient: { useSession: vi.fn() } }))
 
 const mockedGet = vi.mocked(axios.get)
@@ -114,7 +113,7 @@ describe('Tickets page', () => {
     expect(screen.getByText('Bob Jones')).toBeInTheDocument()
   })
 
-  it('shows Open status badge with blue styling', async () => {
+  it('shows Open status badge with semantic open styling', async () => {
     mockedGet.mockImplementation((url: string) =>
       url === '/api/users/agents'
         ? Promise.resolve({ data: mockAgents })
@@ -124,7 +123,7 @@ describe('Tickets page', () => {
     await screen.findByRole('link', { name: 'Cannot log in' })
     // Use { selector: 'span' } to skip <option> elements that also contain "Open"
     const badge = screen.getAllByText('Open', { selector: 'span' })[0]
-    expect(badge).toHaveClass('bg-blue-100', 'text-blue-700')
+    expect(badge).toHaveClass('bg-status-open-soft', 'text-status-open')
   })
 
   it('shows In Progress status badge with amber styling', async () => {
@@ -136,7 +135,7 @@ describe('Tickets page', () => {
     renderWithQuery()
     await screen.findByRole('link', { name: 'Refund request' })
     const badge = screen.getAllByText('In Progress', { selector: 'span' })[0]
-    expect(badge).toHaveClass('bg-amber-100', 'text-amber-700')
+    expect(badge).toHaveClass('bg-status-inprogress-soft', 'text-status-inprogress')
   })
 
   it('shows Account category badge', async () => {
@@ -149,7 +148,7 @@ describe('Tickets page', () => {
     await screen.findByRole('link', { name: 'Cannot log in' })
     // Category badge is a <span> — use selector to avoid matching the <option>
     const badge = screen.getAllByText('Account', { selector: 'span' })[0]
-    expect(badge).toHaveClass('bg-gray-900', 'text-white')
+    expect(badge).toHaveClass('bg-status-ai-resolved-soft', 'text-status-ai-resolved')
   })
 
   it('shows priority badge for an active ticket', async () => {

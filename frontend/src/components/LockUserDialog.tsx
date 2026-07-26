@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,7 +68,7 @@ export default function LockUserDialog({ user, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{locking ? 'Lock' : 'Unlock'} {user?.name}?</DialogTitle>
           <DialogDescription>
@@ -90,21 +91,25 @@ export default function LockUserDialog({ user, open, onOpenChange }: Props) {
               {...register('adminPassword')}
             />
             {errors.adminPassword && (
-              <p className="text-xs text-destructive">{errors.adminPassword.message}</p>
+              <p role="alert" className="text-caption text-destructive">
+                {errors.adminPassword.message}
+              </p>
             )}
           </div>
 
           {mutation.isError && (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p
+              role="alert"
+              className="rounded-lg border border-status-danger/20 bg-status-danger-soft px-3 py-2 text-sm text-status-danger"
+            >
               {(mutation.error as AxiosError<{ error: string }>)?.response?.data?.error ?? 'Something went wrong'}
             </p>
           )}
 
-          <div className="flex gap-2">
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
-              className="flex-1"
               onClick={() => onOpenChange(false)}
             >
               Cancel
@@ -112,14 +117,14 @@ export default function LockUserDialog({ user, open, onOpenChange }: Props) {
             <Button
               type="submit"
               variant={locking ? 'destructive' : 'default'}
-              className="flex-1"
               disabled={mutation.isPending}
+              loading={mutation.isPending}
             >
               {mutation.isPending
                 ? (locking ? 'Locking…' : 'Unlocking…')
                 : (locking ? 'Lock Agent' : 'Unlock Agent')}
             </Button>
-          </div>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

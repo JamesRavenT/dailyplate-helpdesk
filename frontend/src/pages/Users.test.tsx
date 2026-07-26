@@ -5,7 +5,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Users from './Users'
 
 vi.mock('axios', () => ({ default: { get: vi.fn() } }))
-vi.mock('../components/Navbar', () => ({ default: () => <nav /> }))
 
 const mockedGet = vi.mocked(axios.get)
 
@@ -106,38 +105,38 @@ describe('Users page', () => {
   // Role badges
   // ---------------------------------------------------------------------------
 
-  it('renders ADMIN badge with blue styling', async () => {
+  it('renders ADMIN badge with primary styling', async () => {
     mockedGet.mockResolvedValue({ data: mockUsers })
     renderWithQuery()
     await screen.findByText('Alice Admin')
-    expect(screen.getByText('ADMIN')).toHaveClass('bg-blue-100', 'text-blue-700')
+    expect(screen.getByText('ADMIN')).toHaveClass('bg-primary/10', 'text-primary')
   })
 
-  it('renders AGENT badge with gray styling', async () => {
+  it('renders AGENT badge with neutral styling', async () => {
     mockedGet.mockResolvedValue({ data: mockUsers })
     renderWithQuery()
     await screen.findByText('Alice Admin')
     // Both agents → grab the first
-    expect(screen.getAllByText('AGENT')[0]).toHaveClass('bg-gray-100', 'text-gray-600')
+    expect(screen.getAllByText('AGENT')[0]).toHaveClass('bg-muted', 'text-muted-foreground')
   })
 
   // ---------------------------------------------------------------------------
   // Status (account lock) column
   // ---------------------------------------------------------------------------
 
-  it('renders Active status badge with green styling', async () => {
+  it('renders Active status badge with resolved styling', async () => {
     mockedGet.mockResolvedValue({ data: mockUsers })
     renderWithQuery()
     await screen.findByText('Alice Admin')
     // Alice Admin and Carol Agent are active — grab the first
-    expect(screen.getAllByText('Active')[0]).toHaveClass('bg-green-100', 'text-green-700')
+    expect(screen.getAllByText('Active')[0]).toHaveClass('bg-status-resolved-soft', 'text-status-resolved')
   })
 
-  it('renders Locked status badge with red styling for inactive accounts', async () => {
+  it('renders Locked status badge with danger styling for inactive accounts', async () => {
     mockedGet.mockResolvedValue({ data: mockUsers })
     renderWithQuery()
     await screen.findByText('Alice Admin')
-    expect(screen.getByText('Locked')).toHaveClass('bg-red-100', 'text-red-600')
+    expect(screen.getByText('Locked')).toHaveClass('bg-status-danger-soft', 'text-status-danger')
   })
 
   // ---------------------------------------------------------------------------
@@ -150,7 +149,7 @@ describe('Users page', () => {
     await screen.findByText('Bob Agent')
     expect(screen.getByText('Online')).toBeInTheDocument()
     const dot = screen.getByText('Online').previousElementSibling
-    expect(dot).toHaveClass('bg-green-500')
+    expect(dot).toHaveClass('bg-status-resolved')
   })
 
   it('agent with AWAY status shows yellow dot and Away label', async () => {
@@ -159,7 +158,7 @@ describe('Users page', () => {
     await screen.findByText('Carol Agent')
     expect(screen.getByText('Away')).toBeInTheDocument()
     const dot = screen.getByText('Away').previousElementSibling
-    expect(dot).toHaveClass('bg-yellow-400')
+    expect(dot).toHaveClass('bg-status-inprogress')
   })
 
   it('admin row shows em-dash in Availability column', async () => {

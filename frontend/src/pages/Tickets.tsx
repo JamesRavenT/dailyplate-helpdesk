@@ -9,14 +9,27 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table'
-import { Brain, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, User } from 'lucide-react'
-import Navbar from '../components/Navbar'
+import { Brain, ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, User } from 'lucide-react'
 import { Skeleton } from '../components/ui/skeleton'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { EmptyState } from '../components/ui/empty-state'
+import { ErrorState } from '../components/ui/error-state'
+import { StatusBadge, type TicketStatus } from '../components/ui/status-badge'
+import { PriorityBadge, type TicketPriority } from '../components/ui/priority-badge'
+import { CategoryBadge, type TicketCategory } from '../components/ui/category-badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog'
 import { authClient } from '../lib/auth-client'
 
-type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'AI_PROCESSING' | 'AI_RESOLVED'
-type Priority = 'LOW' | 'MEDIUM' | 'HIGH'
-type Category = 'ACCOUNT' | 'INQUIRY' | 'PAYMENT' | 'TECHNICAL' | 'VOUCHER' | 'OTHER' | 'DELIVERY' | 'MENU'
+type Priority = TicketPriority
+type Category = TicketCategory
 
 type TicketListItem = {
   id: string
@@ -57,24 +70,6 @@ const statusLabels: Record<TicketStatus, string> = {
   AI_RESOLVED: 'AI Resolved',
 }
 
-const statusBadgeClass: Record<TicketStatus, string> = {
-  OPEN: 'bg-blue-100 text-blue-700',
-  IN_PROGRESS: 'bg-amber-100 text-amber-700',
-  RESOLVED: 'bg-green-100 text-green-700',
-  CLOSED: 'bg-gray-100 text-gray-600',
-  AI_PROCESSING: 'bg-purple-100 text-purple-700',
-  AI_RESOLVED: 'bg-emerald-100 text-emerald-700',
-}
-
-const statusDotClass: Record<TicketStatus, string> = {
-  OPEN: 'bg-blue-500',
-  IN_PROGRESS: 'bg-amber-500',
-  RESOLVED: 'bg-green-500',
-  CLOSED: 'bg-gray-400',
-  AI_PROCESSING: 'bg-purple-500',
-  AI_RESOLVED: 'bg-emerald-500',
-}
-
 const categoryLabels: Record<Category, string> = {
   ACCOUNT: 'Account',
   INQUIRY: 'Inquiry',
@@ -86,10 +81,26 @@ const categoryLabels: Record<Category, string> = {
   OTHER: 'Others',
 }
 
-const priorityStyles: Record<Priority, string> = {
-  LOW: 'bg-blue-100 text-blue-700',
-  MEDIUM: 'bg-violet-100 text-violet-700',
-  HIGH: 'bg-red-100 text-red-600',
+const priorityRail: Record<Priority, string> = {
+  LOW: 'border-l-muted-foreground/35',
+  MEDIUM: 'border-l-status-inprogress',
+  HIGH: 'border-l-status-danger',
+}
+
+const statusRail: Record<TicketStatus, string> = {
+  OPEN: 'border-l-status-open',
+  IN_PROGRESS: 'border-l-status-inprogress',
+  RESOLVED: 'border-l-status-resolved',
+  CLOSED: 'border-l-status-resolved',
+  AI_PROCESSING: 'border-l-status-ai-resolved',
+  AI_RESOLVED: 'border-l-status-ai-resolved',
+}
+
+function ticketRail(ticket: TicketListItem) {
+  if (ticket.status === 'RESOLVED' || ticket.status === 'CLOSED' || ticket.status === 'AI_RESOLVED') {
+    return statusRail[ticket.status]
+  }
+  return ticket.priority ? priorityRail[ticket.priority] : statusRail[ticket.status]
 }
 
 async function fetchTickets(
@@ -130,16 +141,13 @@ function getPageNumbers(current: number, total: number): (number | 'gap')[] {
 }
 
 function SortIcon({ sorted }: { sorted: false | 'asc' | 'desc' }) {
-  if (sorted === 'asc') return <ChevronUp className="ml-1 h-3 w-3" />
-  if (sorted === 'desc') return <ChevronDown className="ml-1 h-3 w-3" />
-  return <ChevronsUpDown className="ml-1 h-3 w-3 text-gray-400" />
+  if (sorted === 'asc') return <ChevronUp aria-hidden="true" className="size-3.5" />
+  if (sorted === 'desc') return <ChevronDown aria-hidden="true" className="size-3.5" />
+  return <ChevronsUpDown aria-hidden="true" className="size-3.5 text-muted-foreground/55" />
 }
 
 const controlClass =
-  'text-sm border border-gray-200 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500'
-
-const pageButtonClass =
-  'text-sm px-3 py-1.5 rounded-md border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+  'h-9 rounded-lg border border-input bg-card px-3 text-label text-foreground shadow-e1 outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 motion-reduce:transition-none'
 
 export default function Tickets() {
   const { data: session } = authClient.useSession()
@@ -164,9 +172,11 @@ export default function Tickets() {
   const sortBy = sorting[0]?.id ?? 'created_at'
   const sortOrder = (sorting[0]?.desc ?? true) ? 'desc' : 'asc'
 
-  const { data: response, isPending, error } = useQuery({
+  const { data: response, isPending, error, refetch } = useQuery({
     queryKey: ['tickets', sortBy, sortOrder, filterCategory, filterStatus, search, page],
     queryFn: () => fetchTickets(sortBy, sortOrder, filterCategory, filterStatus, search, page),
+    refetchInterval: 15_000,
+    staleTime: 0,
   })
 
   const { data: agents = [] } = useQuery({
@@ -200,14 +210,14 @@ export default function Tickets() {
         accessorKey: 'subject',
         header: 'Subject',
         cell: ({ row }) => (
-          <div className="flex flex-col gap-1">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium w-fit ${statusBadgeClass[row.original.status]}`}>
-              <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusDotClass[row.original.status]}`} />
-              {statusLabels[row.original.status]}
-            </span>
+          <div className="flex min-w-52 flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <StatusBadge status={row.original.status} />
+              <span className="tabular text-[0.6875rem] text-muted-foreground">#{row.original.id.slice(0, 8)}</span>
+            </div>
             <Link
               to={`/tickets/${row.original.id}`}
-              className="font-medium text-gray-900 hover:text-blue-600 transition-colors"
+              className="w-fit max-w-72 truncate text-label font-semibold text-foreground outline-none transition-colors hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
             >
               {row.original.subject}
             </Link>
@@ -218,9 +228,9 @@ export default function Tickets() {
         accessorKey: 'customer_name',
         header: 'Customer',
         cell: ({ row }) => (
-          <div>
-            <div className="text-gray-900">{row.original.customer_name}</div>
-            <div className="text-gray-400 text-xs">{row.original.customer_email}</div>
+          <div className="min-w-36">
+            <div className="text-label font-medium text-foreground">{row.original.customer_name}</div>
+            <div className="mt-0.5 max-w-48 truncate text-caption text-muted-foreground">{row.original.customer_email}</div>
           </div>
         ),
       },
@@ -230,11 +240,9 @@ export default function Tickets() {
         cell: ({ row }) => {
           const category = row.original.category
           return category ? (
-            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-900 text-white">
-              {categoryLabels[category]}
-            </span>
+            <CategoryBadge category={category} />
           ) : (
-            <span className="text-gray-300">—</span>
+            <span className="text-muted-foreground/55">—</span>
           )
         },
       },
@@ -244,14 +252,12 @@ export default function Tickets() {
         cell: ({ row }) => {
           const { status, priority } = row.original
           if (status === 'RESOLVED' || status === 'CLOSED') {
-            return <span className="text-gray-400">--</span>
+            return <span className="text-muted-foreground/55">—</span>
           }
           return priority ? (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${priorityStyles[priority]}`}>
-              {priority.charAt(0) + priority.slice(1).toLowerCase()}
-            </span>
+            <PriorityBadge priority={priority} />
           ) : (
-            <span className="text-gray-300">—</span>
+            <span className="text-muted-foreground/55">—</span>
           )
         },
       },
@@ -264,25 +270,29 @@ export default function Tickets() {
         header: 'Agent',
         cell: ({ row }) => {
           const { id, assigned_to, is_ai_handled } = row.original
-          const btnClass = "mx-auto flex items-center justify-center w-20 text-xs font-medium border border-gray-300 rounded-md px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors"
           return assigned_to ? (
-            <button
+            <Button
+              variant="outline"
+              size="icon-sm"
               onClick={() => setModal({ mode: 'view', ticketId: id, agent: assigned_to })}
               title={assigned_to.name}
-              className={btnClass}
+              aria-label={assigned_to.name}
+              className="mx-auto"
             >
               {is_ai_handled
-                ? <Brain className="h-4 w-4 text-purple-500" />
-                : <User className="h-4 w-4 text-gray-500" />
+                ? <Brain aria-hidden="true" className="text-status-ai-resolved" />
+                : <User aria-hidden="true" className="text-muted-foreground" />
               }
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="outline"
+              size="xs"
               onClick={() => setModal({ mode: 'assign', ticketId: id })}
-              className={`${btnClass} text-gray-900`}
+              className="mx-auto"
             >
               Assign
-            </button>
+            </Button>
           )
         },
       })
@@ -292,7 +302,7 @@ export default function Tickets() {
       accessorKey: 'last_updated_at',
       header: 'Last Update',
       cell: ({ row }) => (
-        <span className="text-gray-500">
+        <span className="tabular whitespace-nowrap text-caption text-muted-foreground">
           {new Date(row.original.last_updated_at ?? row.original.created_at).toLocaleDateString()}
         </span>
       ),
@@ -315,77 +325,108 @@ export default function Tickets() {
   const colCount = columns.length
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Navbar />
-      <main className="max-w-5xl mx-auto px-6 py-10">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Tickets</h1>
-          <p className="text-sm text-gray-500 mt-1">Incoming support requests from email</p>
-        </div>
+    <div>
+      <div className="mx-auto max-w-7xl">
+        <header className="mb-5 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-h1 font-semibold tracking-tight text-foreground">Tickets</h1>
+              {!isPending && !error ? (
+                <span className="tabular rounded-full bg-muted px-2.5 py-1 text-caption font-medium text-muted-foreground">
+                  {total} {total === 1 ? 'ticket' : 'tickets'}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-body text-muted-foreground">
+              {isAdmin ? 'Incoming support requests from email' : 'Support requests assigned to you'}
+            </p>
+          </div>
 
-        <div className="flex items-center gap-3 mb-4">
-          <input
-            type="text"
-            placeholder="Search tickets…"
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            className={`${controlClass} w-52 cursor-text`}
-          />
+          <div role="search" aria-label="Filter tickets" className="flex flex-wrap items-center gap-2">
+            <label className="relative min-w-56 flex-1 sm:flex-none">
+              <span className="sr-only">Search tickets</span>
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search tickets…"
+                value={searchInput}
+                onChange={e => setSearchInput(e.target.value)}
+                className="w-full pl-9 sm:w-60"
+              />
+            </label>
 
-          <select
-            value={filterCategory}
-            onChange={e => { setFilterCategory(e.target.value as Category | ''); setPage(1) }}
-            className={`${controlClass} cursor-pointer`}
-          >
-            <option value="">All Categories</option>
-            {(Object.keys(categoryLabels) as Category[]).map(key => (
-              <option key={key} value={key}>{categoryLabels[key]}</option>
-            ))}
-          </select>
-
-          <select
-            value={filterStatus}
-            onChange={e => { setFilterStatus(e.target.value as TicketStatus | ''); setPage(1) }}
-            className={`${controlClass} cursor-pointer`}
-          >
-            <option value="">All Statuses</option>
-            {(Object.keys(statusLabels) as TicketStatus[])
-              .filter(key => isAdmin || key === 'OPEN' || key === 'IN_PROGRESS')
-              .map(key => (
-                <option key={key} value={key}>{statusLabels[key]}</option>
-              ))}
-          </select>
-
-          {hasFilters && (
-            <button
-              onClick={() => {
-                setFilterCategory('')
-                setFilterStatus('')
-                setSearchInput('')
-                setSearch('')
-                setPage(1)
-              }}
-              className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
+            <select
+              aria-label="Filter by category"
+              value={filterCategory}
+              onChange={e => { setFilterCategory(e.target.value as Category | ''); setPage(1) }}
+              className={`${controlClass} cursor-pointer`}
             >
-              Clear filters
-            </button>
-          )}
-        </div>
+              <option value="">All Categories</option>
+              {(Object.keys(categoryLabels) as Category[]).map(key => (
+                <option key={key} value={key}>{categoryLabels[key]}</option>
+              ))}
+            </select>
 
-        {error && <p className="text-sm text-red-600">{error.message}</p>}
+            <select
+              aria-label="Filter by status"
+              value={filterStatus}
+              onChange={e => { setFilterStatus(e.target.value as TicketStatus | ''); setPage(1) }}
+              className={`${controlClass} cursor-pointer`}
+            >
+              <option value="">All Statuses</option>
+              {(Object.keys(statusLabels) as TicketStatus[])
+                .filter(key => isAdmin || key === 'OPEN' || key === 'IN_PROGRESS')
+                .map(key => (
+                  <option key={key} value={key}>{statusLabels[key]}</option>
+                ))}
+            </select>
+
+            {hasFilters ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setFilterCategory('')
+                  setFilterStatus('')
+                  setSearchInput('')
+                  setSearch('')
+                  setPage(1)
+                }}
+              >
+                Clear filters
+              </Button>
+            ) : null}
+          </div>
+        </header>
+
+        {error ? (
+          <ErrorState
+            title="Ticket queue unavailable"
+            description={error.message}
+            action={<Button variant="outline" size="sm" onClick={() => void refetch()}>Try again</Button>}
+          />
+        ) : null}
 
         {!error && (
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-e1">
+            <div className="overflow-x-auto">
+              <table aria-label="Tickets" className="w-full min-w-[860px] border-collapse text-body">
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
+                <tr className="border-b border-border">
                   {table.getHeaderGroups()[0].headers.map(header => (
-                    <th key={header.id} className={`px-4 py-3 font-medium text-gray-600 ${header.column.id === 'assigned_to' ? 'text-center' : 'text-left'}`}>
+                    <th
+                      key={header.id}
+                      scope="col"
+                      aria-sort={header.column.getIsSorted() === 'asc' ? 'ascending' : header.column.getIsSorted() === 'desc' ? 'descending' : 'none'}
+                      className={`px-4 py-3 text-caption font-semibold text-muted-foreground ${header.column.id === 'assigned_to' ? 'text-center' : 'text-left'}`}
+                    >
                       {isPending ? (
                         flexRender(header.column.columnDef.header, header.getContext())
                       ) : (
                         <button
-                          className="inline-flex items-center hover:text-gray-900 transition-colors cursor-pointer"
+                          type="button"
+                          aria-label={`Sort by ${String(header.column.columnDef.header)}`}
+                          className="inline-flex items-center gap-1 rounded-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 motion-reduce:transition-none"
                           onClick={header.column.getToggleSortingHandler()}
                         >
                           {flexRender(header.column.columnDef.header, header.getContext())}
@@ -399,9 +440,9 @@ export default function Tickets() {
               <tbody>
                 {isPending ? (
                   Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                    <tr key={i} className={i < PAGE_SIZE - 1 ? 'border-b border-gray-100' : ''}>
-                      <td className="px-4 py-3"><Skeleton className="h-9 w-48" /></td>
-                      <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
+                    <tr key={i} className="border-b border-border/70 last:border-b-0">
+                      <td className="border-l-4 border-l-transparent px-4 py-3.5"><Skeleton className="h-10 w-48" /></td>
+                      <td className="px-4 py-3.5"><Skeleton className="h-8 w-32" /></td>
                       <td className="px-4 py-3"><Skeleton className="h-5 w-20 rounded-full" /></td>
                       <td className="px-4 py-3"><Skeleton className="h-5 w-14 rounded-full" /></td>
                       {isAdmin && <td className="px-4 py-3 text-center"><Skeleton className="h-7 w-20 rounded-md mx-auto" /></td>}
@@ -410,18 +451,25 @@ export default function Tickets() {
                   ))
                 ) : table.getRowModel().rows.length === 0 ? (
                   <tr>
-                    <td colSpan={colCount} className="px-4 py-8 text-center text-gray-400">
-                      No tickets match the current filters.
+                    <td colSpan={colCount} className="p-4">
+                      <EmptyState
+                        className="min-h-52 border-0 bg-transparent"
+                        title="No tickets match the current filters."
+                        description="Adjust the search or filters to widen the queue."
+                      />
                     </td>
                   </tr>
                 ) : (
-                  table.getRowModel().rows.map((row, i) => (
+                  table.getRowModel().rows.map(row => (
                     <tr
                       key={row.id}
-                      className={`hover:bg-gray-50 transition-colors${i < table.getRowModel().rows.length - 1 ? ' border-b border-gray-100' : ''}`}
+                      className="group border-b border-border/70 transition-colors hover:bg-muted/45 last:border-b-0 motion-reduce:transition-none"
                     >
                       {row.getVisibleCells().map(cell => (
-                        <td key={cell.id} className={`px-4 py-3 ${cell.column.id === 'assigned_to' ? 'text-center' : ''}`}>
+                        <td
+                          key={cell.id}
+                          className={`px-4 py-3.5 align-middle ${cell.column.id === 'subject' ? `border-l-4 ${ticketRail(row.original)}` : ''} ${cell.column.id === 'assigned_to' ? 'text-center' : ''}`}
+                        >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
@@ -430,145 +478,151 @@ export default function Tickets() {
                 )}
               </tbody>
             </table>
+            </div>
 
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
-              <p className="text-sm text-gray-500">
+            <div className="flex flex-col items-center justify-between gap-3 border-t border-border bg-muted/25 px-4 py-3 sm:flex-row">
+              <p className="tabular text-caption text-muted-foreground">
                 {isPending
                   ? 'Loading…'
                   : total === 0
                   ? 'No tickets'
                   : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} of ${total}`}
               </p>
-              <div className="flex items-center gap-1">
-                <button
+              <nav aria-label="Ticket pagination" className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="First page"
                   onClick={() => setPage(1)}
                   disabled={page <= 1 || isPending}
-                  className={pageButtonClass}
                   title="First page"
                 >
-                  <ChevronsLeft className="h-4 w-4" />
-                </button>
-                <button
+                  <ChevronsLeft aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Previous page"
                   onClick={() => setPage(p => p - 1)}
                   disabled={page <= 1 || isPending}
-                  className={pageButtonClass}
                   title="Previous page"
                 >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
+                  <ChevronLeft aria-hidden="true" />
+                </Button>
 
-                <div className="flex items-center gap-1 mx-1">
+                <div className="mx-1 flex items-center gap-1">
                   {getPageNumbers(page, totalPages).map((p, i) =>
                     p === 'gap' ? (
-                      <span key={`gap-${i}`} className="w-8 text-center text-sm text-gray-400 select-none">…</span>
+                      <span key={`gap-${i}`} className="w-8 select-none text-center text-label text-muted-foreground">…</span>
                     ) : (
-                      <button
+                      <Button
                         key={p}
+                        variant={p === page ? 'primary' : 'ghost'}
+                        size="icon-sm"
+                        aria-label={`Go to page ${p}`}
+                        aria-current={p === page ? 'page' : undefined}
                         onClick={() => setPage(p)}
                         disabled={isPending}
-                        className={`h-8 w-8 text-sm rounded-md transition-colors ${
-                          p === page
-                            ? 'bg-gray-900 text-white'
-                            : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40'
-                        }`}
                       >
                         {p}
-                      </button>
+                      </Button>
                     )
                   )}
                 </div>
 
-                <button
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Next page"
                   onClick={() => setPage(p => p + 1)}
                   disabled={page >= totalPages || isPending}
-                  className={pageButtonClass}
                   title="Next page"
                 >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-                <button
+                  <ChevronRight aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="Last page"
                   onClick={() => setPage(totalPages)}
                   disabled={page >= totalPages || isPending}
-                  className={pageButtonClass}
                   title="Last page"
                 >
-                  <ChevronsRight className="h-4 w-4" />
-                </button>
-              </div>
+                  <ChevronsRight aria-hidden="true" />
+                </Button>
+              </nav>
             </div>
           </div>
         )}
-      </main>
+      </div>
 
       {/* Agent assignment modal */}
       {modal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
-          onClick={() => setModal(null)}
-        >
-          <div
-            className="bg-white rounded-xl shadow-xl w-80 p-6"
-            onClick={e => e.stopPropagation()}
-          >
+        <Dialog open onOpenChange={(open) => { if (!open) setModal(null) }}>
+          <DialogContent className="sm:max-w-md">
             {modal.mode === 'assign' ? (
               <>
-                <h2 className="text-base font-semibold text-gray-900 mb-4">Assign Agent</h2>
+                <DialogHeader>
+                  <DialogTitle>Assign Agent</DialogTitle>
+                  <DialogDescription>Select an agent to take ownership of this ticket.</DialogDescription>
+                </DialogHeader>
                 {agents.length === 0 ? (
-                  <p className="text-sm text-gray-400">No agents available.</p>
+                  <EmptyState className="min-h-36" title="No agents available." icon={<User aria-hidden="true" className="size-5" />} />
                 ) : (
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
                     {agents.map(a => (
-                      <button
+                      <Button
                         key={a.id}
+                        variant="ghost"
                         onClick={() => {
                           assignMutation.mutate({ ticketId: modal.ticketId, agentId: a.id })
                           setModal(null)
                         }}
-                        className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-100 transition-colors"
+                        className="h-auto w-full justify-start px-3 py-2.5 text-left"
                       >
-                        <p className="text-sm text-gray-800">{a.name}</p>
-                        <p className="text-xs text-gray-400">{a.email}</p>
-                      </button>
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-caption font-semibold text-foreground">
+                          {a.name.trim().charAt(0).toUpperCase()}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-label font-semibold text-foreground">{a.name}</span>
+                          <span className="block truncate text-caption font-normal text-muted-foreground">{a.email}</span>
+                        </span>
+                      </Button>
                     ))}
                   </div>
                 )}
-                <button
-                  onClick={() => setModal(null)}
-                  className="mt-4 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  Cancel
-                </button>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setModal(null)}>Cancel</Button>
+                </DialogFooter>
               </>
             ) : (
               <>
-                <h2 className="text-base font-semibold text-gray-900 mb-4">Assigned Agent</h2>
-                <div className="flex items-center gap-3 py-2 mb-4">
-                  <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-xl select-none">
-                    👤
+                <DialogHeader>
+                  <DialogTitle>Assigned Agent</DialogTitle>
+                  <DialogDescription>Current ticket ownership and reassignment controls.</DialogDescription>
+                </DialogHeader>
+                <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/45 p-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-card text-label font-semibold text-foreground shadow-e1">
+                    {modal.agent.name.trim().charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{modal.agent.name}</p>
-                    <p className="text-xs text-gray-400">{modal.agent.email}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-label font-semibold text-foreground">{modal.agent.name}</p>
+                    <p className="truncate text-caption text-muted-foreground">{modal.agent.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button
+                <DialogFooter>
+                  <Button
+                    variant="outline"
                     onClick={() => setModal({ mode: 'assign', ticketId: modal.ticketId })}
-                    className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700 transition-colors"
                   >
                     Re-assign
-                  </button>
-                  <button
-                    onClick={() => setModal(null)}
-                    className="flex-1 text-sm px-3 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition-colors"
-                  >
-                    Close
-                  </button>
-                </div>
+                  </Button>
+                  <Button onClick={() => setModal(null)}>Close</Button>
+                </DialogFooter>
               </>
             )}
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   )

@@ -1,0 +1,44 @@
+# Render Blueprint — DailyPlate Helpdesk backend.
+# Docs: docs/how-to/deploy.md
+#
+# On the free plan, migrations run at container start via backend/docker-entrypoint.sh
+# because Render's preDeployCommand requires a paid instance type. On a paid plan, set
+# `plan: starter` below and uncomment the preDeployCommand line inside the service.
+services:
+  - type: web
+    name: dailyplate-helpdesk-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile.prod
+    dockerContext: .
+    healthCheckPath: /health
+    # preDeployCommand: bun run prisma:deploy && (bun run prisma:seed || echo '[seed] skipped/failed')
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: SENTRY_DSN
+        sync: false

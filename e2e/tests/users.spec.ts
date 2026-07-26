@@ -86,7 +86,7 @@ test.describe('User Management', () => {
     await expect(page.locator('#lu-password')).not.toBeVisible()
 
     const row = page.getByRole('row').filter({ hasText: name })
-    await expect(row.getByText('Inactive')).toBeVisible()
+    await expect(row.getByText('Locked')).toBeVisible()
     await expect(page.getByRole('button', { name: `Unlock ${name}` })).toBeVisible()
   })
 

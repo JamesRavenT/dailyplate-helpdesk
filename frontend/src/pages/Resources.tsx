@@ -2,9 +2,12 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
-import { Plus, Pencil, Trash2, BookOpen, Search, X } from 'lucide-react'
-import Navbar from '../components/Navbar'
+import { ArrowLeft, BookOpen, FileText, Pencil, Plus, Search, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CategoryBadge } from '@/components/ui/category-badge'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { authClient } from '../lib/auth-client'
 import ArticleDialog from '../components/ArticleDialog'
@@ -38,18 +41,24 @@ const CATEGORY_ORDER: Category[] = [
   'ACCOUNT', 'DELIVERY', 'MENU', 'PAYMENT', 'TECHNICAL', 'VOUCHER', 'INQUIRY', 'OTHER',
 ]
 
-// Markdown renderer — shared between article reader and (future) preview
 const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
-  p:      ({ children }) => <p className="text-sm text-slate-700 leading-relaxed mb-3 last:mb-0">{children}</p>,
-  strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
-  ul:     ({ children }) => <ul className="text-sm text-slate-700 list-disc pl-5 space-y-1 mb-3 last:mb-0">{children}</ul>,
-  ol:     ({ children }) => <ol className="text-sm text-slate-700 list-decimal pl-5 space-y-1 mb-3 last:mb-0">{children}</ol>,
-  li:     ({ children }) => <li className="leading-relaxed">{children}</li>,
+  h1:     ({ children }) => <h3 className="mb-3 mt-7 text-h3 font-semibold tracking-tight text-foreground first:mt-0">{children}</h3>,
+  h2:     ({ children }) => <h3 className="mb-2 mt-6 text-h3 font-semibold tracking-tight text-foreground first:mt-0">{children}</h3>,
+  h3:     ({ children }) => <h4 className="mb-2 mt-5 text-body-lg font-semibold text-foreground first:mt-0">{children}</h4>,
+  p:      ({ children }) => <p className="mb-4 text-body-lg leading-7 text-foreground/80 last:mb-0">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+  ul:     ({ children }) => <ul className="mb-4 list-disc space-y-1.5 pl-5 text-body-lg leading-7 text-foreground/80 last:mb-0">{children}</ul>,
+  ol:     ({ children }) => <ol className="mb-4 list-decimal space-y-1.5 pl-5 text-body-lg leading-7 text-foreground/80 last:mb-0">{children}</ol>,
+  li:     ({ children }) => <li className="pl-1 marker:text-muted-foreground">{children}</li>,
   a:      ({ href, children }) => (
-    <a href={href} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+    <a href={href} className="font-medium text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary" target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   ),
+  blockquote: ({ children }) => <blockquote className="my-5 border-l-2 border-primary bg-primary/5 px-4 py-3 text-foreground/75">{children}</blockquote>,
+  pre: ({ children }) => <pre className="my-5 overflow-x-auto rounded-lg border border-border bg-muted p-4 text-caption leading-6 text-foreground">{children}</pre>,
+  code: ({ children }) => <code className="tabular rounded bg-muted px-1.5 py-0.5 text-caption text-foreground">{children}</code>,
+  hr: () => <hr className="my-6 border-border" />,
 }
 
 async function fetchArticles(): Promise<Article[]> {
@@ -61,7 +70,7 @@ export default function Resources() {
   const { data: session } = authClient.useSession()
   const isAdmin = (session?.user as any)?.role === 'ADMIN'
 
-  const { data: articles = [], isPending, error } = useQuery({
+  const { data: articles = [], isPending, error, refetch } = useQuery({
     queryKey: ['articles'],
     queryFn: fetchArticles,
   })
@@ -109,206 +118,223 @@ export default function Resources() {
     setSelectedArticle(null)
   }
 
-  // ── Article card (shared between category list and search results) ─────────
   function ArticleCard({ article, showCategory = false }: { article: Article; showCategory?: boolean }) {
     return (
-      <button
-        onClick={() => selectArticle(article)}
-        className="w-full text-left bg-white rounded-xl border border-slate-200 px-5 py-4 hover:border-slate-300 hover:shadow-sm transition-all group"
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            {showCategory && (
-              <span className="inline-block mb-1 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                {CATEGORY_LABELS[article.category]}
+      <article className="group relative flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 shadow-e1 transition-[border-color,box-shadow,background-color] hover:border-primary/25 hover:bg-muted/20 hover:shadow-e2 motion-reduce:transition-none">
+        <button
+          type="button"
+          onClick={() => selectArticle(article)}
+          className="min-w-0 flex-1 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          aria-label={`Read ${article.title}`}
+        >
+          <span className="flex items-start gap-3">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+              <FileText aria-hidden="true" className="size-4" />
+            </span>
+            <span className="min-w-0">
+              {showCategory ? <CategoryBadge category={article.category} className="mb-1.5" /> : null}
+              <span className="block truncate text-body font-semibold text-foreground group-hover:text-primary">{article.title}</span>
+              <span className="tabular mt-1 block text-caption text-muted-foreground">
+                Updated {new Date(article.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </span>
-            )}
-            <p className="font-medium text-gray-900 group-hover:text-slate-700 truncate">{article.title}</p>
-          </div>
-          {isAdmin && (
-            <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button
+            </span>
+          </span>
+        </button>
+        {isAdmin && (
+          <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={(e) => { e.stopPropagation(); openEdit(article) }}
-                className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                aria-label={`Edit ${article.title}`}
+                className="text-muted-foreground"
               >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
+                <Pencil aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={(e) => { e.stopPropagation(); setDeletingArticle(article) }}
-                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                aria-label={`Delete ${article.title}`}
+                className="text-muted-foreground hover:bg-status-danger-soft hover:text-status-danger"
               >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-      </button>
+                <Trash2 aria-hidden="true" />
+              </Button>
+          </div>
+        )}
+      </article>
+    )
+  }
+
+  function CategoryNavigation() {
+    return (
+      <nav aria-label="Article categories" className="flex gap-1 overflow-x-auto pb-2 lg:block lg:w-56 lg:shrink-0 lg:space-y-1 lg:overflow-visible lg:pb-0">
+        {CATEGORY_ORDER.map((category) => {
+          const active = activeCategory === category
+          const count = countByCategory[category] ?? 0
+
+          return (
+            <button
+              key={category}
+              type="button"
+              onClick={() => { setActiveCategory(category); setSelectedArticle(null) }}
+              aria-current={active ? 'page' : undefined}
+              className={`relative flex shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-label font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:w-full ${
+                active
+                  ? 'bg-primary/10 text-primary before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-primary'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <span>{CATEGORY_LABELS[category]}</span>
+              {count > 0 ? (
+                <span className={`tabular rounded-full px-1.5 py-0.5 text-caption ${active ? 'bg-card text-primary' : 'bg-muted text-muted-foreground'}`}>
+                  {count}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </nav>
     )
   }
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Navbar />
-      <main className="max-w-6xl mx-auto px-6 py-10">
-
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Resources</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Standard operating procedures for every support category</p>
+    <div className="mx-auto max-w-7xl">
+      <header className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-h1 font-semibold tracking-tight text-foreground">Resources</h1>
+            {!isPending && !error ? (
+              <span className="tabular rounded-full bg-muted px-2.5 py-1 text-caption font-medium text-muted-foreground">
+                {articles.length} {articles.length === 1 ? 'article' : 'articles'}
+              </span>
+            ) : null}
           </div>
-          {isAdmin && (
-            <Button onClick={openCreate} className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              New Article
-            </Button>
-          )}
+          <p className="mt-1 text-body text-muted-foreground">Standard operating procedures for every support category</p>
         </div>
+        {isAdmin ? (
+          <Button onClick={openCreate}>
+            <Plus aria-hidden="true" />
+            New Article
+          </Button>
+        ) : null}
+      </header>
 
-        {/* Search */}
-        <div className="relative mb-5">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setSelectedArticle(null) }}
-            placeholder="Search articles…"
-            className="w-full pl-9 pr-9 py-2 text-sm rounded-lg border border-slate-200 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-slate-400 placeholder:text-slate-400"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+      <div className="relative mb-6 max-w-2xl">
+        <label htmlFor="article-search" className="sr-only">Search articles</label>
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          id="article-search"
+          type="search"
+          value={search}
+          onChange={(event) => { setSearch(event.target.value); setSelectedArticle(null) }}
+          placeholder="Search articles…"
+          className="pl-9 pr-9"
+        />
+        {search ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => setSearch('')}
+            aria-label="Clear article search"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          >
+            <X aria-hidden="true" />
+          </Button>
+        ) : null}
+      </div>
+
+      {isPending ? (
+        <div aria-label="Loading articles" className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
+          <div className="flex gap-2 overflow-hidden lg:block lg:space-y-2">
+            {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-9 w-36 shrink-0 lg:w-full" />)}
+          </div>
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[76px] w-full rounded-xl" />)}
+          </div>
         </div>
-
-        {isPending ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((n) => <Skeleton key={n} className="h-16 w-full rounded-xl" />)}
+      ) : error ? (
+        <ErrorState
+          title="Knowledge base unavailable"
+          description="Articles could not be loaded. Try the request again."
+          action={<Button variant="outline" size="sm" onClick={() => void refetch()}>Try again</Button>}
+        />
+      ) : isSearching ? (
+        <section aria-labelledby="search-results-heading" className="space-y-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 id="search-results-heading" className="text-h3 font-semibold tracking-tight text-foreground">Search results</h2>
+            <span className="tabular text-caption text-muted-foreground">{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</span>
           </div>
-        ) : error ? (
-          <p className="text-sm text-destructive">Failed to load articles.</p>
-        ) : isSearching ? (
-          /* ── Search results ─────────────────────────────────────────────── */
-          <div className="space-y-3">
-            {searchResults.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
-                <Search className="h-8 w-8 text-slate-300 mb-3" />
-                <p className="text-sm font-medium text-slate-500">No articles match "{search}"</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-xs text-slate-400 mb-1">{searchResults.length} result{searchResults.length !== 1 ? 's' : ''}</p>
-                {searchResults.map((article) => (
-                  <ArticleCard key={article.id} article={article} showCategory />
-                ))}
-              </>
-            )}
-          </div>
-        ) : selectedArticle ? (
-          /* ── Article reader ─────────────────────────────────────────────── */
-          <div className="flex gap-6">
-            <nav className="w-52 shrink-0 space-y-1">
-              {CATEGORY_ORDER.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => { setActiveCategory(cat); setSelectedArticle(null) }}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
-                    activeCategory === cat
-                      ? 'bg-slate-900 text-white'
-                      : 'text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {CATEGORY_LABELS[cat]}
-                  {(countByCategory[cat] ?? 0) > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                      activeCategory === cat ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'
-                    }`}>
-                      {countByCategory[cat]}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
-
-            <div className="flex-1 min-w-0">
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <div className="flex items-start justify-between gap-4 mb-5">
-                  <h2 className="text-lg font-semibold text-gray-900">{selectedArticle.title}</h2>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isAdmin && (
-                      <>
+          {searchResults.length === 0 ? (
+            <EmptyState
+              title={`No articles match “${search}”`}
+              description="Try a shorter title or browse by category."
+              icon={<Search aria-hidden="true" className="size-5" />}
+            />
+          ) : searchResults.map((article) => <ArticleCard key={article.id} article={article} showCategory />)}
+        </section>
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-7">
+          <CategoryNavigation />
+          <section aria-live="polite" className="min-w-0">
+            {selectedArticle ? (
+              <article className="rounded-xl border border-border bg-card shadow-e1">
+                <header className="border-b border-border px-5 py-5 sm:px-7">
+                  <Button variant="ghost" size="sm" onClick={handleBack} className="mb-4 -ml-2 text-muted-foreground">
+                    <ArrowLeft aria-hidden="true" />
+                    Back
+                  </Button>
+                  <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                    <div className="min-w-0">
+                      <CategoryBadge category={selectedArticle.category} className="mb-2" />
+                      <h2 className="text-h2 font-semibold tracking-tight text-foreground">{selectedArticle.title}</h2>
+                    </div>
+                    {isAdmin ? (
+                      <div className="flex shrink-0 items-center gap-2">
                         <Button size="sm" variant="outline" onClick={() => openEdit(selectedArticle)}>
-                          <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
+                          <Pencil aria-hidden="true" />
+                          Edit
                         </Button>
-                        <Button size="sm" variant="outline" className="text-destructive border-destructive/30 hover:bg-destructive/5" onClick={() => setDeletingArticle(selectedArticle)}>
-                          <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                        <Button size="sm" variant="outline" className="border-status-danger/25 text-status-danger hover:bg-status-danger-soft hover:text-status-danger" onClick={() => setDeletingArticle(selectedArticle)}>
+                          <Trash2 aria-hidden="true" />
+                          Delete
                         </Button>
-                      </>
-                    )}
-                    <Button size="sm" variant="ghost" onClick={handleBack}>← Back</Button>
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-                <div className="[&>*:last-child]:mb-0">
+                </header>
+                <div className="px-5 py-6 sm:px-7 sm:py-7">
                   <ReactMarkdown components={mdComponents}>{selectedArticle.content}</ReactMarkdown>
+                  <p className="tabular mt-8 border-t border-border pt-4 text-caption text-muted-foreground">
+                    Last updated {new Date(selectedArticle.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </p>
                 </div>
-                <p className="text-xs text-slate-400 mt-6 pt-4 border-t border-slate-100">
-                  Last updated {new Date(selectedArticle.updatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
-                </p>
+              </article>
+            ) : visibleArticles.length === 0 ? (
+              <EmptyState
+                title="No articles for this category yet"
+                description={`Add the first ${CATEGORY_LABELS[activeCategory].toLowerCase()} procedure to the knowledge base.`}
+                icon={<BookOpen aria-hidden="true" className="size-5" />}
+                action={isAdmin ? <Button variant="outline" size="sm" onClick={openCreate}>Create the first one</Button> : undefined}
+              />
+            ) : (
+              <div className="space-y-3">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <CategoryBadge category={activeCategory} />
+                    <h2 className="mt-2 text-h3 font-semibold tracking-tight text-foreground">{CATEGORY_LABELS[activeCategory]}</h2>
+                  </div>
+                  <span className="tabular text-caption text-muted-foreground">{visibleArticles.length} article{visibleArticles.length !== 1 ? 's' : ''}</span>
+                </div>
+                {visibleArticles.map((article) => <ArticleCard key={article.id} article={article} />)}
               </div>
-            </div>
-          </div>
-        ) : (
-          /* ── Category browse ────────────────────────────────────────────── */
-          <div className="flex gap-6">
-            <nav className="w-52 shrink-0 space-y-1">
-              {CATEGORY_ORDER.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => { setActiveCategory(cat); setSelectedArticle(null) }}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
-                    activeCategory === cat
-                      ? 'bg-slate-900 text-white'
-                      : 'text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {CATEGORY_LABELS[cat]}
-                  {(countByCategory[cat] ?? 0) > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                      activeCategory === cat ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'
-                    }`}>
-                      {countByCategory[cat]}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </nav>
-
-            <div className="flex-1 min-w-0">
-              {visibleArticles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center">
-                  <BookOpen className="h-8 w-8 text-slate-300 mb-3" />
-                  <p className="text-sm font-medium text-slate-500">No articles for this category yet</p>
-                  {isAdmin && (
-                    <Button variant="ghost" size="sm" className="mt-3" onClick={openCreate}>
-                      Create the first one
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {visibleArticles.map((article) => (
-                    <ArticleCard key={article.id} article={article} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </main>
+            )}
+          </section>
+        </div>
+      )}
 
       <ArticleDialog
         open={dialogOpen}

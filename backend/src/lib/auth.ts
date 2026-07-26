@@ -3,14 +3,14 @@ import { createAuthMiddleware, APIError } from 'better-auth/api'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { prisma } from './prisma.ts'
 
-// Origins allowed to call the auth API. Built from explicit env vars plus Railway's
-// auto-injected RAILWAY_PUBLIC_DOMAIN (a plain env var at runtime, so it works even if a
-// ${{...}} reference in FRONTEND_URL didn't resolve). Trailing slashes are stripped.
+// Origins allowed to call the auth API. Built from explicit env vars plus Render's
+// auto-injected RENDER_EXTERNAL_URL (a full URL available at runtime). Trailing slashes
+// are stripped.
 export const trustedOrigins = (() => {
   const origins = [
     process.env.FRONTEND_URL,
     process.env.BETTER_AUTH_URL,
-    process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : undefined,
+    process.env.RENDER_EXTERNAL_URL,
   ]
     .filter((o): o is string => Boolean(o) && o !== 'https://')
     .map((o) => o.replace(/\/+$/, ''))

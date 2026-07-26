@@ -15,10 +15,6 @@ vi.mock('../lib/auth-client', () => ({
   authClient: { useSession: vi.fn() },
 }))
 
-vi.mock('../components/Navbar', () => ({
-  default: () => <nav data-testid="navbar" />,
-}))
-
 vi.mock('../lib/recentViews', () => ({
   getRecentViewIds: vi.fn(),
   trackRecentView: vi.fn(),

@@ -26,7 +26,7 @@ bun-debug.log*
 Thumbs.db
 
 # IDE
-.vscode/settings.json
+.vscode/
 .idea/
 
 # Bun
@@ -37,3 +37,16 @@ e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/
 e2e/.auth/
+e2e/allure-results/
+e2e/allure-report/
+
+# Local AI tooling & agent config (kept local, not published)
+.claude/
+.agents/
+backend/.claude/
+skills-lock.json
+
+# Local planning notes (superseded by docs/ — kept local, not published)
+/implemenation-plan.md
+/project-scope.md
+/tech-stack.md

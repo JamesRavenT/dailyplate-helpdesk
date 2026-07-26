@@ -54,6 +54,20 @@ async function createTicketViaWebhook(
   return { res, messageId }
 }
 
+async function waitForTicketSettled(page: Page, ticketId: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const res = await page.request.get(`http://localhost:3001/api/tickets/${ticketId}`)
+        if (!res.ok()) return 'AI_PROCESSING'
+        const ticket = await res.json()
+        return ticket.status as string
+      },
+      { timeout: 20000, intervals: [500] },
+    )
+    .not.toBe('AI_PROCESSING')
+}
+
 /** Returns the test agent's ID via the admin auth context. */
 async function getTestAgentId(adminPage: Page): Promise<string> {
   const res = await adminPage.request.get('http://localhost:3001/api/users/agents')
@@ -200,7 +214,7 @@ test.describe('tickets list', () => {
 
     await page.goto('/tickets')
     await page.getByPlaceholder('Search tickets…').fill(subject)
-    await expect(page.getByRole('link', { name: subject })).toBeVisible()
+    await expect(page.getByRole('link', { name: subject })).toBeVisible({ timeout: 20000 })
   })
 
   test('assign modal shows real agents loaded from the database', async ({
@@ -208,9 +222,11 @@ test.describe('tickets list', () => {
     request,
   }) => {
     const subject = `E2E Agent List ${Date.now()}`
-    await createTicketViaWebhook(request, { subject })
+    const { res } = await createTicketViaWebhook(request, { subject })
+    const { ticket_id } = await res.json()
 
     await page.goto('/tickets')
+    await waitForTicketSettled(page, ticket_id)
     await page.getByPlaceholder('Search tickets…').fill(subject)
     const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: subject }) })
     await row.getByRole('button', { name: 'Assign' }).click()
@@ -224,17 +240,19 @@ test.describe('tickets list', () => {
     request,
   }) => {
     const subject = `E2E Assign PATCH ${Date.now()}`
-    await createTicketViaWebhook(request, { subject })
+    const { res } = await createTicketViaWebhook(request, { subject })
+    const { ticket_id } = await res.json()
 
     await page.goto('/tickets')
+    await waitForTicketSettled(page, ticket_id)
     await page.getByPlaceholder('Search tickets…').fill(subject)
     const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: subject }) })
     await row.getByRole('button', { name: 'Assign' }).click()
     await page.locator('button').filter({ hasText: 'agent@test.com' }).click()
 
-    // Row updated in-place without re-sort — Assign gone, 👤 present
+    // Row updated in-place without re-sort — Assign gone, the assigned-agent button present
     await expect(row.getByRole('button', { name: 'Assign' })).not.toBeVisible()
-    await expect(row.getByRole('button', { name: '👤' })).toBeVisible()
+    await expect(row.getByRole('button', { name: 'Agent', exact: true })).toBeVisible()
   })
 
   test('viewing assigned agent modal shows real agent data from the database', async ({
@@ -244,13 +262,14 @@ test.describe('tickets list', () => {
     const subject = `E2E View Agent ${Date.now()}`
     const { res } = await createTicketViaWebhook(request, { subject })
     const { ticket_id } = await res.json()
+    await waitForTicketSettled(page, ticket_id)
     const agentId = await getTestAgentId(page)
     await assignTicket(page, ticket_id, agentId)
 
     await page.goto('/tickets')
     await page.getByPlaceholder('Search tickets…').fill(subject)
     const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: subject }) })
-    await row.getByRole('button', { name: '👤' }).click()
+    await row.getByRole('button', { name: 'Agent', exact: true }).click()
 
     await expect(page.getByRole('heading', { name: 'Assigned Agent' })).toBeVisible()
     await expect(page.getByText('agent@test.com')).toBeVisible()
@@ -263,13 +282,14 @@ test.describe('tickets list', () => {
     const subject = `E2E Re-assign ${Date.now()}`
     const { res } = await createTicketViaWebhook(request, { subject })
     const { ticket_id } = await res.json()
+    await waitForTicketSettled(page, ticket_id)
     const agentId = await getTestAgentId(page)
     await assignTicket(page, ticket_id, agentId)
 
     await page.goto('/tickets')
     await page.getByPlaceholder('Search tickets…').fill(subject)
     const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: subject }) })
-    await row.getByRole('button', { name: '👤' }).click()
+    await row.getByRole('button', { name: 'Agent', exact: true }).click()
     await page.getByRole('button', { name: 'Re-assign' }).click()
 
     await expect(page.getByRole('heading', { name: 'Assign Agent' })).toBeVisible()
@@ -310,6 +330,7 @@ test.describe('tickets list', () => {
     const subject = `E2E Visible ${Date.now()}`
     const { res } = await createTicketViaWebhook(request, { subject })
     const { ticket_id } = await res.json()
+    await waitForTicketSettled(adminPage, ticket_id)
     const agentId = await getTestAgentId(adminPage)
     await assignTicket(adminPage, ticket_id, agentId)
 
@@ -327,7 +348,7 @@ test.describe('tickets list', () => {
 
     await page.goto('/tickets')
     await page.getByPlaceholder('Search tickets…').fill(subject)
-    await expect(page.getByRole('link', { name: subject })).toBeVisible()
+    await expect(page.getByRole('link', { name: subject })).toBeVisible({ timeout: 20000 })
     await expect(page.getByText(/showing 1.+of 1/i)).toBeVisible()
   })
 })

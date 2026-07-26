@@ -23,13 +23,13 @@ async function saveSession(
   await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
 
   await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill(password)
+  await page.getByLabel('Password', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Sign In' }).click()
 
   await page.waitForURL('/')
 
-  // Verify session was established — the navbar Sign Out button confirms it.
-  await expect(page.getByRole('button', { name: 'Sign Out' })).toBeVisible()
+  // Verify session was established — the user-menu button confirms it.
+  await expect(page.getByRole('button', { name: 'Open user menu' })).toBeVisible()
 
   await page.context().storageState({ path: storageStatePath })
   console.log(`[auth-setup] Saved session for ${email} → ${path.basename(storageStatePath)}`)

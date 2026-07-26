@@ -3,6 +3,8 @@ import axios, { type AxiosError } from 'axios'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -29,24 +31,25 @@ export default function DeleteArticleDialog({ article, onClose, onDeleted }: Pro
 
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Delete Article</DialogTitle>
+          <DialogDescription>This action permanently removes the article from the knowledge base.</DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-slate-600">
-          Are you sure you want to delete <span className="font-medium text-gray-900">"{article.title}"</span>? This action cannot be undone.
+        <p className="text-body leading-6 text-muted-foreground">
+          Are you sure you want to delete <span className="font-semibold text-foreground">“{article.title}”</span>? This action cannot be undone.
         </p>
         {mutation.isError && (
-          <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p role="alert" className="rounded-lg border border-status-danger/20 bg-status-danger-soft px-3 py-2 text-label text-status-danger">
             {(mutation.error as AxiosError<{ error: string }>)?.response?.data?.error ?? 'Failed to delete article'}
           </p>
         )}
-        <div className="flex justify-end gap-2 mt-2">
+        <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={mutation.isPending}>Cancel</Button>
-          <Button variant="destructive" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          <Button variant="destructive" onClick={() => mutation.mutate()} disabled={mutation.isPending} loading={mutation.isPending}>
             {mutation.isPending ? 'Deleting…' : 'Delete'}
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

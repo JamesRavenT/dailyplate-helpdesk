@@ -12,6 +12,6 @@
     "run_worker_first": ["/api", "/api/*", "/health"]
   },
   "vars": {
-    "BACKEND_ORIGIN": "https://REPLACE_WITH_RENDER_URL"
+    "BACKEND_ORIGIN": "https://dailyplate-helpdesk-backend.onrender.com"
   }
 }

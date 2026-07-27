@@ -9,9 +9,14 @@
     "directory": "./dist",
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
-    "run_worker_first": ["/api", "/api/*", "/health"]
+    "run_worker_first": ["/*", "!/assets/*"]
   },
   "vars": {
     "BACKEND_ORIGIN": "https://dailyplate-helpdesk-backend.onrender.com"
-  }
+  },
+  // Custom Domains on the dailyplate.help zone; Cloudflare provisions DNS + TLS automatically.
+  "routes": [
+    { "pattern": "dailyplate.help", "custom_domain": true },
+    { "pattern": "www.dailyplate.help", "custom_domain": true }
+  ]
 }

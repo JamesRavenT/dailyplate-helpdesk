@@ -14,6 +14,13 @@ interface WorkerHandler<TEnv> {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    // Keep one canonical origin for Better Auth session cookies and trustedOrigins
+    if (url.hostname.startsWith('www.')) {
+      url.hostname = url.hostname.slice(4)
+      return Response.redirect(url.toString(), 301)
+    }
+
     const p = url.pathname
 
     if (p === '/api/internal' || p.startsWith('/api/internal/')) {

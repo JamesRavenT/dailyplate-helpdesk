@@ -2,6 +2,12 @@ import { defineConfig, devices } from '@playwright/test'
 import path from 'path'
 import { ADMIN_STATE } from './tests/fixtures/auth'
 
+const runRealOpenAi = process.env.RUN_REAL_OPENAI === '1'
+
+if (runRealOpenAi && !process.env.OPENAI_API_KEY) {
+  throw new Error('RUN_REAL_OPENAI=1 requires OPENAI_API_KEY (this opt-in project incurs API cost)')
+}
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
@@ -21,10 +27,19 @@ export default defineConfig({
     { name: 'setup', testMatch: /setup\/auth-setup\.ts/ },
     {
       name: 'chromium',
-      testIgnore: /(smoke|screenshots)\//,
+      testIgnore: /(smoke|screenshots|real-ai)\//,
       use: { ...devices['Desktop Chrome'] },
       dependencies: ['setup'],
     },
+    ...(runRealOpenAi ? [{
+      name: 'real-openai',
+      testMatch: /real-ai\/.*\.spec\.ts/,
+      dependencies: ['setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: ADMIN_STATE,
+      },
+    }] : []),
     {
       name: 'screenshots',
       testMatch: /screenshots\/.*\.spec\.ts/,
@@ -45,9 +60,15 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'bun run --env-file=.env.test src/index.ts',
+      command: 'bun run --env-file=.env.test.example src/index.ts',
       cwd: path.resolve(__dirname, '../backend'),
       url: 'http://localhost:3001/health',
+      // Playwright's explicit env overrides the parent shell. The default suite both
+      // selects the network-free stub and blanks any key inherited from a maintainer.
+      env: {
+        AI_PROVIDER: runRealOpenAi ? 'openai' : 'stub',
+        OPENAI_API_KEY: runRealOpenAi ? (process.env.OPENAI_API_KEY ?? '') : '',
+      },
       // Never reuse an existing backend — a dev server pointing at the dev DB
       // would silently pass tests for users that exist there and fail for
       // test-only users (e.g. admin@test.com).

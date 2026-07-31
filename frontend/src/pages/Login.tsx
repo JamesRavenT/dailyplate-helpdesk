@@ -25,7 +25,10 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>
 
 export default function Login() {
-  const [serverError, setServerError] = useState('')
+  const expired = new URLSearchParams(window.location.search).get('expired') === '1'
+  const [serverError, setServerError] = useState(
+    expired ? 'Your session expired. Please sign in again.' : '',
+  )
   const [showPassword, setShowPassword] = useState(false)
   const serverErrorRef = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()

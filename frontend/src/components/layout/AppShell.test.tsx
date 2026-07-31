@@ -1,22 +1,22 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import axios from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AppShell from './AppShell'
 import { authClient } from '../../lib/auth-client'
+import { endSession } from '../../lib/session'
 
 vi.mock('axios', () => ({ default: { get: vi.fn(), patch: vi.fn() } }))
 vi.mock('../../lib/auth-client', () => ({
   authClient: { useSession: vi.fn(), signOut: vi.fn() },
 }))
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
-  return { ...actual, useNavigate: vi.fn() }
-})
+vi.mock('../../hooks/useIdleLogout', () => ({
+  useIdleLogout: () => ({ showWarning: false, remainingSeconds: 0, staySignedIn: vi.fn() }),
+}))
+vi.mock('../../lib/session', () => ({ endSession: vi.fn() }))
 
-const mockNavigate = vi.fn()
 const mockedGet = vi.mocked(axios.get)
 const mockedPatch = vi.mocked(axios.patch)
 
@@ -84,11 +84,10 @@ async function openUserMenu() {
 describe('AppShell', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockNavigate.mockReset()
-    vi.mocked(useNavigate).mockReturnValue(mockNavigate)
     mockedGet.mockResolvedValue({ data: { new: 0 } })
     mockedPatch.mockResolvedValue({})
     vi.mocked(authClient.signOut).mockResolvedValue(undefined as never)
+    vi.mocked(endSession).mockResolvedValue(undefined)
   })
 
   describe('navigation and identity', () => {
@@ -209,12 +208,11 @@ describe('AppShell', () => {
       await openUserMenu()
       fireEvent.click(screen.getByRole('menuitem', { name: 'Sign Out' }))
 
-      await waitFor(() => expect(authClient.signOut).toHaveBeenCalled())
+      await waitFor(() => expect(endSession).toHaveBeenCalledWith('/login'))
       expect(mockedPatch).toHaveBeenCalledWith('/api/users/status', { status: 'OFFLINE' })
       expect(mockedPatch.mock.invocationCallOrder[0]).toBeLessThan(
-        vi.mocked(authClient.signOut).mock.invocationCallOrder[0],
+        vi.mocked(endSession).mock.invocationCallOrder[0],
       )
-      expect(mockNavigate).toHaveBeenCalledWith('/login')
     })
 
     it('signs out an admin without patching Offline', async () => {
@@ -222,9 +220,8 @@ describe('AppShell', () => {
       await openUserMenu()
       fireEvent.click(screen.getByRole('menuitem', { name: 'Sign Out' }))
 
-      await waitFor(() => expect(authClient.signOut).toHaveBeenCalled())
+      await waitFor(() => expect(endSession).toHaveBeenCalledWith('/login'))
       expect(mockedPatch).not.toHaveBeenCalled()
-      expect(mockNavigate).toHaveBeenCalledWith('/login')
     })
   })
 })

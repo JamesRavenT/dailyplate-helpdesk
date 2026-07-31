@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma.ts'
 import { openai } from '@ai-sdk/openai'
 import { generateText } from 'ai'
 import { sendReplyToCustomer } from '../lib/email.ts'
+import { normalizeSignOff } from '../lib/text.ts'
 
 const listQuerySchema = z.object({
   sortBy: z.enum(['subject', 'customer_name', 'status', 'priority', 'category', 'created_at', 'last_updated_at', 'assigned_to']).optional(),
@@ -130,6 +131,9 @@ export async function createMessage(req: Request, res: Response, next: NextFunct
     res.status(201).json(message)
 
     sendReplyToCustomer({
+      ticketId: id,
+      messageId: message.id,
+      replyType: 'agent',
       customerEmail: ticket.customer_email,
       customerName: ticket.customer_name,
       subject: ticket.subject,
@@ -231,7 +235,7 @@ export async function polishReply(req: Request, res: Response, next: NextFunctio
 Always format the reply exactly like this:
 1. Start with a warm greeting to the customer by first name: "Hi [First Name],"
 2. The polished reply body (one or more paragraphs).
-3. End with a sign-off on its own line:
+3. End with this exact two-line sign-off. The two lines must be consecutive, with NO blank line between them:
 
 Warm regards,
 DailyPlate Support Team
@@ -240,7 +244,7 @@ Return only the formatted reply with no commentary or preamble.`,
       prompt: `Customer name: ${ticket.customer_name}\nTicket subject: ${ticket.subject}\n\nConversation so far:\n${thread || '(no messages yet)'}\n\nAgent's draft reply:\n${parsed.data.body}`,
     })
 
-    res.json({ polished: text })
+    res.json({ polished: normalizeSignOff(text) })
   } catch (err) { next(err) }
 }
 

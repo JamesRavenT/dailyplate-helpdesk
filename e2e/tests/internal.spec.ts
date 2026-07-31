@@ -4,7 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 
 const testEnv = dotenv.parse(
-  fs.readFileSync(path.resolve(__dirname, '../../backend/.env.test'), 'utf8'),
+  fs.readFileSync(path.resolve(__dirname, '../../backend/.env.test.example'), 'utf8'),
 )
 const INTERNAL_API_TOKEN = testEnv.INTERNAL_API_TOKEN
 const INTERNAL_URL = 'http://localhost:3001/api/internal/resend-inbound'

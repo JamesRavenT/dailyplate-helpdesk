@@ -31,8 +31,9 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
+    // API polling cannot refresh this cookie; client activity calls authClient.getSession().
+    expiresIn: 60 * 60,
+    updateAge: 60 * 5,
   },
   trustedOrigins,
   hooks: {

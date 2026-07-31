@@ -115,13 +115,32 @@ the event to the Render internal endpoint. See [`n8n/README.md`](../../n8n/READM
 importable workflow and step-by-step setup.
 
 1. Import `n8n/workflows/resend-inbound-gateway.json` into your n8n instance.
-2. Set two n8n **environment variables** (read via `$env` by the Code and HTTP nodes):
+2. Set one n8n **environment variable** (read via `$env` by the Code node):
    - `RESEND_INBOUND_SECRET` — the Resend inbound signing secret (Svix, `whsec_…`).
-   - `HELPDESK_BACKEND_URL` — the Render backend base URL, **no trailing slash** (target of
-     `POST /api/internal/resend-inbound`). Use the `onrender.com` URL directly, **not** the
-     Cloudflare URL — `/api/internal/*` is blocked at the Cloudflare edge by design.
-3. Create an **Header Auth** credential named **`DailyPlate Internal Token`**: header
-   `X-Internal-Token`, value = the same `INTERNAL_API_TOKEN` set on Render.
+
+   The **Verify Svix Signature** Code node has two independent runtime requirements:
+
+   - Set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` on the n8n instance so the node can read
+     `RESEND_INBOUND_SECRET` through `$env`.
+   - If task runners are enabled, allow the built-in `crypto` module with an `env-override` in
+     `/etc/n8n-task-runners.json`. A container environment variable is not sufficient:
+
+     ```json
+     { "task-runners": [ { "runner-type": "javascript",
+         "env-overrides": { "NODE_FUNCTION_ALLOW_BUILTIN": "crypto" } } ] }
+     ```
+
+     Without this task-runner setting, `require('crypto')` fails with
+     `Module 'crypto' is disallowed`.
+
+   The export contains the placeholder
+   `https://your-backend.onrender.com/api/internal/resend-inbound` on the **Forward to
+   Helpdesk** node. After import, replace `your-backend` with your Render service hostname.
+   Keep the `onrender.com` origin rather than the Cloudflare domain because
+   `/api/internal/*` is blocked at the Cloudflare edge by design.
+3. Create a **Header Auth** credential (header `X-Internal-Token`, value = the same
+   `INTERNAL_API_TOKEN` set on Render) **and select it on the `Forward to Helpdesk` node**.
+   Creating it without selecting it leaves the forward call unauthenticated.
 4. Activate the workflow and copy its production webhook URL.
 5. In Resend, point the **inbound** webhook at the n8n webhook URL.
 

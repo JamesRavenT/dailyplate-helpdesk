@@ -1,8 +1,10 @@
 import { config } from 'dotenv'
 import * as Sentry from '@sentry/node'
 
-// Load .env before Sentry reads process.env
-config()
+// The E2E launcher supplies an explicit test env file. Do not let dotenv fill missing
+// test values (especially OPENAI_API_KEY) from a developer's backend/.env.
+// Unset/default and production startup keep the existing .env loading behavior.
+if (process.env.NODE_ENV !== 'test') config()
 
 Sentry.init({
   dsn: process.env.SENTRY_DSN,

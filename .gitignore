@@ -7,11 +7,16 @@ node_modules/
 dist/
 build/
 .vite/
+coverage/
+.wrangler/
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.*.example
+.dev.vars
+.dev.vars.*
 
 # Logs
 *.log
@@ -39,6 +44,15 @@ e2e/playwright-report/
 e2e/.auth/
 e2e/allure-results/
 e2e/allure-report/
+e2e/blob-report/
+
+# Private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
 
 # Local AI tooling & agent config (kept local, not published)
 .claude/

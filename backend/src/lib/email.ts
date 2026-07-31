@@ -1,16 +1,18 @@
-import { Resend } from 'resend'
+import { getResendClient } from './resend.ts'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
 const FROM = `DailyPlate Support <${process.env.RESEND_FROM_EMAIL ?? 'support@dailyplate.help'}>`
 
 export async function sendReplyToCustomer(opts: {
+  ticketId: string
+  messageId: string
+  replyType: 'agent' | 'ai'
   customerEmail: string
   customerName: string
   subject: string
   body: string
   emailThreadId: string | null
 }) {
-  const { customerEmail, subject, body, emailThreadId } = opts
+  const { ticketId, messageId, replyType, customerEmail, subject, body, emailThreadId } = opts
   const replySubject = /^re:/i.test(subject) ? subject : `Re: ${subject}`
 
   const extraHeaders: Record<string, string> = {}
@@ -24,11 +26,23 @@ export async function sendReplyToCustomer(opts: {
     return
   }
 
-  await resend.emails.send({
-    from: FROM,
-    to: customerEmail,
-    subject: replySubject,
-    text: body,
-    headers: extraHeaders,
-  })
+  const { data, error } = await getResendClient().emails.send(
+    {
+      from: FROM,
+      to: customerEmail,
+      subject: replySubject,
+      text: body,
+      headers: extraHeaders,
+    },
+    { idempotencyKey: `ticket-reply/${ticketId}/${replyType}/${messageId}` },
+  )
+
+  if (error) {
+    console.error(
+      `[email] send failed: recipient=${customerEmail} subject=${replySubject} ${error.name}: ${error.message}`,
+    )
+    throw new Error(error.message)
+  }
+
+  void data
 }

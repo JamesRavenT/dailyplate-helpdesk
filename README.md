@@ -11,8 +11,6 @@ an AI reply assistant at their side.
 
 **Status:** v1.1.0 — actively developed portfolio project. Not affiliated with any real brand.
 
-<!-- SCREENSHOTS: dashboard hero image goes here once captured (docs/assets/) -->
-
 ---
 
 ## Table of contents
@@ -31,6 +29,7 @@ an AI reply assistant at their side.
 - [Security](#security)
 - [Limitations](#limitations)
 - [Documentation](#documentation)
+- [License](#license)
 
 ---
 
@@ -71,13 +70,13 @@ The result: humans spend their time on the tickets that actually need a human.
 - **Smart human routing** — anything requiring account access or judgment is routed to an agent.
 - **Auto-reopen** — a customer reply to an AI-resolved ticket reopens it to `OPEN` and re-queues it.
 - **Async processing** — AI work runs off the request path on a **pg-boss** job queue, so
-  webhook responses stay fast and processing is retry-safe.
+  webhook responses stay fast, with automatic retries for failed jobs.
 
 ### Agent workflow
-- **Round-robin assignment** — load-aware distribution across `ONLINE`/`AWAY` agents, capped at
+- **Round-robin assignment** — load-aware distribution across `ONLINE` agents, capped at
   5 concurrent open tickets per agent; overflow waits in a queue.
 - **Agent presence** — agents set their status (Online / Away / Meeting / Offline); going online
-  drains queued tickets to them. A background sweep marks stale agents offline.
+  or away drains queued tickets to them. A background sweep marks stale agents offline.
 - **Threaded replies** — agent replies are emailed to the customer inside the original thread.
 - **AI "Polish" assistant** — one click rewrites an agent's draft for clarity, tone, and grammar
   while preserving intent.
@@ -97,7 +96,8 @@ The result: humans spend their time on the tickets that actually need a human.
 - **Knowledge base** — category-organized SOP articles that ground the AI's replies.
 
 ### Platform
-- **Role-based access** — `ADMIN` and `AGENT` roles enforced on every API route.
+- **Role-based access** — `ADMIN` and `AGENT` roles protect business-data routes; agents are
+  further scoped to their own tickets in the controllers.
 - **Professional UI** — a cohesive design system: dark sidebar app shell, a semantic
   status/priority color language, Geist + Geist Mono typography, and consistent loading/empty/
   error states throughout.
@@ -121,7 +121,7 @@ Resend Inbound ──(signed webhook)──► n8n gateway (GCP VM)
                                                                │
                                                ┌───────────────┴────────────────┐
                                                ▼                                 ▼
-                                  AI: classify + can resolve?             (queued job, retry-safe)
+                                  AI: classify + can resolve?             (queued job, automatic retries)
                                                │
                     ┌──────────────────────────┴──────────────────────────┐
                     ▼ yes (policy-only)                                     ▼ no
@@ -192,8 +192,8 @@ discussion, including why the inbound pipeline is split between n8n and the Rend
   runs the existing thread-matching + triage pipeline. This offloads the webhook front door and
   adds retry/observability while keeping all business logic in tested TypeScript.
 - **Auth** is database-session based (no JWTs). Sessions live in the Postgres `session` table with
-  a 7-day expiry. **Sign-up is disabled** — the first admin is seeded; further users are created
-  by admins from the UI.
+  a 1-hour expiry, and agents are signed out after 60 minutes of inactivity. **Sign-up is
+  disabled** — the first admin is seeded; further users are created by admins from the UI.
 
 ---
 
@@ -262,7 +262,9 @@ cd e2e      && npm install && cd ..
 cp backend/.env.example backend/.env
 # Fill in: BETTER_AUTH_SECRET, OPENAI_API_KEY, RESEND_*, SEED_ADMIN_*, INTERNAL_API_TOKEN
 ```
-See `backend/.env.example` for the full annotated list.
+This copy is required before any `docker compose up` command, including starting only
+PostgreSQL, because Compose validates the backend service's environment file when it loads
+the project. See `backend/.env.example` for the full annotated list.
 
 ### 3. Start PostgreSQL
 ```bash
@@ -300,6 +302,10 @@ docker compose up postgres-test -d
 cd e2e && npm test
 cd e2e && npm run report                  # generate + open the Allure report
 ```
+
+The default E2E suite uses a deterministic, network-free AI stub. Live OpenAI triage validation
+is a separate opt-in project that requires a real key and incurs API cost; see the
+[testing strategy](./docs/explanation/testing-strategy.md#real-openai-validation-opt-in-and-paid).
 
 **Test layering:** UI logic is covered by fast component tests; E2E is reserved for what needs
 the real backend (webhook → DB → API → UI pipelines, backend-enforced authorization, real
@@ -360,7 +366,9 @@ Captured from the running app against seeded demo data (see [`docs/assets/`](./d
 ## Security
 
 - **Authentication & roles** — Better Auth with DB sessions; `requireAuth` / `requireAdmin` on
-  every route; agents are scoped to their own tickets in all queries.
+  every protected business-data route, with agents scoped to their own tickets at controller
+  level. Health, the API root, Better Auth, the development-only legacy webhook, and internal
+  service routes use their own boundaries.
 - **Input validation** — Zod schemas on all request bodies and query params.
 - **SQL safety** — Prisma everywhere; raw analytics queries use parameterized tagged templates.
 - **Inbound integrity** — the Resend/Svix signature is verified in the n8n gateway; the internal
@@ -400,7 +408,16 @@ Captured from the running app against seeded demo data (see [`docs/assets/`](./d
 
 | Doc | Type | What it covers |
 |---|---|---|
+| [docs/tutorial/getting-started.md](./docs/tutorial/getting-started.md) | Tutorial | Running the app locally and working a seeded ticket |
 | [docs/how-to/deploy.md](./docs/how-to/deploy.md) | How-to | Deploying to Cloudflare + Render + Neon + n8n |
 | [docs/explanation/architecture.md](./docs/explanation/architecture.md) | Explanation | System design and the key decisions behind it |
 | [docs/explanation/testing-strategy.md](./docs/explanation/testing-strategy.md) | Explanation | The component-vs-E2E testing layers |
+| [docs/reference/api.md](./docs/reference/api.md) | Reference | Backend endpoints and their auth boundaries |
 | [docs/reference/environment-variables.md](./docs/reference/environment-variables.md) | Reference | Every environment variable |
+| [LICENSE](./LICENSE) | License | MIT license terms |
+
+---
+
+## License
+
+DailyPlate Helpdesk is available under the [MIT License](./LICENSE).

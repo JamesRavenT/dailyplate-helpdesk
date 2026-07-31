@@ -8,7 +8,7 @@ function d(month: number, day: number, hour = 9, minute = 0) {
 }
 
 function msgId(n: number) {
-  return `<seed-msg-${n.toString().padStart(4, '0')}@dailyplate.fakesite>`
+  return `<seed-msg-${n.toString().padStart(4, '0')}@dailyplate.example>`
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ async function main() {
     {
       subject: "Can't access my account after password reset",
       customer_name: 'Emma Thompson',
-      customer_email: 'emma.t@yahoo.com',
+      customer_email: 'emma.t@example.com',
       category: 'ACCOUNT' as const,
       priority: 'HIGH' as const,
       created: d(6, 15, 8, 12),
@@ -45,7 +45,7 @@ async function main() {
     {
       subject: "Delivery hasn't arrived — 2 days overdue",
       customer_name: 'James Wilson',
-      customer_email: 'j.wilson@outlook.com',
+      customer_email: 'j.wilson@example.com',
       category: 'DELIVERY' as const,
       priority: 'HIGH' as const,
       created: d(6, 15, 14, 30),
@@ -54,7 +54,7 @@ async function main() {
     {
       subject: 'Unable to log in to the DailyPlate app',
       customer_name: 'Maria Santos',
-      customer_email: 'maria.santos@gmail.com',
+      customer_email: 'maria.santos@example.com',
       category: 'TECHNICAL' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 16, 10, 5),
@@ -63,7 +63,7 @@ async function main() {
     {
       subject: 'Payment declined even though my card is valid',
       customer_name: 'David Chen',
-      customer_email: 'dchen@gmail.com',
+      customer_email: 'dchen@example.com',
       category: 'PAYMENT' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 16, 11, 45),
@@ -72,7 +72,7 @@ async function main() {
     {
       subject: 'Gift card code showing as invalid at checkout',
       customer_name: 'Sophie Martinez',
-      customer_email: 's.martinez@hotmail.com',
+      customer_email: 's.martinez@example.com',
       category: 'VOUCHER' as const,
       priority: 'LOW' as const,
       created: d(6, 17, 9, 0),
@@ -81,7 +81,7 @@ async function main() {
     {
       subject: 'Nut allergy concern with this week\'s Harvest Bowl',
       customer_name: 'Oliver Brown',
-      customer_email: 'o.brown@gmail.com',
+      customer_email: 'o.brown@example.com',
       category: 'MENU' as const,
       priority: 'HIGH' as const,
       created: d(6, 17, 16, 20),
@@ -90,7 +90,7 @@ async function main() {
     {
       subject: 'How many meals can I skip per month?',
       customer_name: 'Lily Johnson',
-      customer_email: 'lily.j@gmail.com',
+      customer_email: 'lily.j@example.com',
       category: 'INQUIRY' as const,
       priority: null,
       created: d(6, 18, 13, 0),
@@ -99,7 +99,7 @@ async function main() {
     {
       subject: 'Need to change delivery address',
       customer_name: 'Noah Kim',
-      customer_email: 'n.kim@outlook.com',
+      customer_email: 'n.kim@example.com',
       category: 'ACCOUNT' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 18, 15, 30),
@@ -108,7 +108,7 @@ async function main() {
     {
       subject: 'App crashes when trying to checkout',
       customer_name: 'Isabella Lee',
-      customer_email: 'i.lee@yahoo.com',
+      customer_email: 'i.lee@example.com',
       category: 'TECHNICAL' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 19, 8, 45),
@@ -117,7 +117,7 @@ async function main() {
     {
       subject: 'Delivery left outside in the rain — contents damaged',
       customer_name: 'Ethan Davis',
-      customer_email: 'e.davis@gmail.com',
+      customer_email: 'e.davis@example.com',
       category: 'DELIVERY' as const,
       priority: 'HIGH' as const,
       created: d(6, 19, 12, 0),
@@ -126,7 +126,7 @@ async function main() {
     {
       subject: 'Charged twice for my June subscription',
       customer_name: 'Ava Clark',
-      customer_email: 'ava.clark@gmail.com',
+      customer_email: 'ava.clark@example.com',
       category: 'PAYMENT' as const,
       priority: 'HIGH' as const,
       created: d(6, 20, 9, 15),
@@ -135,7 +135,7 @@ async function main() {
     {
       subject: 'Referral code not applying discount',
       customer_name: 'Lucas Taylor',
-      customer_email: 'lucas.t@hotmail.com',
+      customer_email: 'lucas.t@example.com',
       category: 'VOUCHER' as const,
       priority: 'LOW' as const,
       created: d(6, 21, 10, 0),
@@ -144,7 +144,7 @@ async function main() {
     {
       subject: 'Request to switch to vegetarian meal plan',
       customer_name: 'Mia Anderson',
-      customer_email: 'mia.a@gmail.com',
+      customer_email: 'mia.a@example.com',
       category: 'MENU' as const,
       priority: null,
       created: d(6, 22, 14, 0),
@@ -153,7 +153,7 @@ async function main() {
     {
       subject: 'How do I temporarily pause my subscription?',
       customer_name: 'Liam White',
-      customer_email: 'l.white@outlook.com',
+      customer_email: 'l.white@example.com',
       category: 'ACCOUNT' as const,
       priority: null,
       created: d(6, 23, 11, 0),
@@ -162,7 +162,7 @@ async function main() {
     {
       subject: 'What areas does DailyPlate currently deliver to?',
       customer_name: 'Charlotte Moore',
-      customer_email: 'c.moore@gmail.com',
+      customer_email: 'c.moore@example.com',
       category: 'INQUIRY' as const,
       priority: null,
       created: d(6, 25, 8, 0),
@@ -176,7 +176,7 @@ async function main() {
     {
       subject: 'How do I upgrade my subscription plan?',
       customer_name: 'Maria Santos',
-      customer_email: 'maria.santos@gmail.com',
+      customer_email: 'maria.santos@example.com',
       category: 'ACCOUNT' as const,
       priority: 'LOW' as const,
       created: d(6, 15, 9, 30),
@@ -190,7 +190,7 @@ async function main() {
     {
       subject: 'Missing ingredient in this week\'s meal kit',
       customer_name: 'James Wilson',
-      customer_email: 'j.wilson@outlook.com',
+      customer_email: 'j.wilson@example.com',
       category: 'DELIVERY' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 17, 7, 45),
@@ -204,7 +204,7 @@ async function main() {
     {
       subject: "Can't update my credit card information",
       customer_name: 'Emma Thompson',
-      customer_email: 'emma.t@yahoo.com',
+      customer_email: 'emma.t@example.com',
       category: 'TECHNICAL' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 19, 10, 0),
@@ -218,7 +218,7 @@ async function main() {
     {
       subject: 'Received wrong meals in this week\'s delivery',
       customer_name: 'David Chen',
-      customer_email: 'dchen@gmail.com',
+      customer_email: 'dchen@example.com',
       category: 'MENU' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 21, 8, 0),
@@ -232,7 +232,7 @@ async function main() {
     {
       subject: "Refund for cancelled order hasn't arrived",
       customer_name: 'Sophie Martinez',
-      customer_email: 's.martinez@hotmail.com',
+      customer_email: 's.martinez@example.com',
       category: 'PAYMENT' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 23, 9, 0),
@@ -251,14 +251,14 @@ async function main() {
     {
       subject: 'Need to update billing information',
       customer_name: 'Oliver Brown',
-      customer_email: 'o.brown@gmail.com',
+      customer_email: 'o.brown@example.com',
       category: 'ACCOUNT' as const,
       priority: null,
       created: d(6, 15, 11, 0),
       agent: a1,
       messages: [
-        { sender: 'CUSTOMER' as const, body: "I need to update the billing email on my account from oliver.b.old@gmail.com to o.brown@gmail.com. How do I do this?", time: d(6, 15, 11, 0) },
-        { sender: 'AGENT' as const, body: `Hi Oliver,\n\nThanks for getting in touch with DailyPlate Support!\n\nI've gone ahead and updated your billing email address from oliver.b.old@gmail.com to o.brown@gmail.com. You'll receive all future receipts and billing notifications at your new email.\n\nIs there anything else I can help you with today?\n\nWarm regards,\nDailyPlate Support Team`, time: d(6, 15, 11, 45) },
+        { sender: 'CUSTOMER' as const, body: "I need to update the billing email on my account from oliver.b.old@example.com to o.brown@example.com. How do I do this?", time: d(6, 15, 11, 0) },
+        { sender: 'AGENT' as const, body: `Hi Oliver,\n\nThanks for getting in touch with DailyPlate Support!\n\nI've gone ahead and updated your billing email address from oliver.b.old@example.com to o.brown@example.com. You'll receive all future receipts and billing notifications at your new email.\n\nIs there anything else I can help you with today?\n\nWarm regards,\nDailyPlate Support Team`, time: d(6, 15, 11, 45) },
         { sender: 'CUSTOMER' as const, body: "Perfect, thank you so much! That's all I needed.", time: d(6, 15, 13, 0) },
         { sender: 'AGENT' as const, body: `Hi Oliver,\n\nYou're very welcome! I'm glad I could help. Have a great day and enjoy your next DailyPlate delivery!\n\nWarm regards,\nDailyPlate Support Team`, time: d(6, 15, 13, 20) },
       ],
@@ -266,7 +266,7 @@ async function main() {
     {
       subject: 'Meal kit item damaged during delivery',
       customer_name: 'Lily Johnson',
-      customer_email: 'lily.j@gmail.com',
+      customer_email: 'lily.j@example.com',
       category: 'DELIVERY' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 18, 9, 0),
@@ -281,7 +281,7 @@ async function main() {
     {
       subject: 'Gift card balance not showing correctly',
       customer_name: 'Noah Kim',
-      customer_email: 'n.kim@outlook.com',
+      customer_email: 'n.kim@example.com',
       category: 'VOUCHER' as const,
       priority: 'LOW' as const,
       created: d(6, 20, 14, 0),
@@ -300,13 +300,13 @@ async function main() {
     {
       subject: 'Password reset email not received',
       customer_name: 'Isabella Lee',
-      customer_email: 'i.lee@yahoo.com',
+      customer_email: 'i.lee@example.com',
       category: 'TECHNICAL' as const,
       priority: 'MEDIUM' as const,
       created: d(6, 16, 14, 0),
       agent: a0,
       messages: [
-        { sender: 'CUSTOMER' as const, body: "I clicked 'Forgot Password' three times today but I'm not receiving the reset email. I've checked spam and promotions folders. My email is i.lee@yahoo.com.", time: d(6, 16, 14, 0) },
+        { sender: 'CUSTOMER' as const, body: "I clicked 'Forgot Password' three times today but I'm not receiving the reset email. I've checked spam and promotions folders. My email is i.lee@example.com.", time: d(6, 16, 14, 0) },
         { sender: 'AGENT' as const, body: `Hi Isabella,\n\nI'm sorry you're having trouble with the password reset! I can see your account and I've manually triggered a new password reset email from our system. It should arrive within the next 5 minutes.\n\nIf it doesn't arrive, it may be a Yahoo mail deliverability issue. As an alternative, I can reset your password directly — just let me know a temporary password you'd like to use and we can change it from the account side.\n\nWarm regards,\nDailyPlate Support Team`, time: d(6, 16, 14, 45) },
         { sender: 'CUSTOMER' as const, body: "I got the email! I've reset my password successfully. All working now. Thank you!", time: d(6, 16, 15, 10) },
         { sender: 'AGENT' as const, body: `Hi Isabella,\n\nWonderful news! I'm so glad that's resolved. Enjoy using DailyPlate — feel free to reach out anytime you need help!\n\nWarm regards,\nDailyPlate Support Team`, time: d(6, 16, 15, 25) },
@@ -315,7 +315,7 @@ async function main() {
     {
       subject: 'Unauthorized charge on my account',
       customer_name: 'Ethan Davis',
-      customer_email: 'e.davis@gmail.com',
+      customer_email: 'e.davis@example.com',
       category: 'PAYMENT' as const,
       priority: 'HIGH' as const,
       created: d(6, 17, 16, 0),

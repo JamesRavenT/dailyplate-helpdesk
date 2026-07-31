@@ -1,11 +1,9 @@
 import { timingSafeEqual } from 'crypto'
 import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { Resend } from 'resend'
 import { prisma } from '../lib/prisma.ts'
+import { getResendClient } from '../lib/resend.ts'
 import { boss, PROCESS_QUEUE } from '../lib/triage.ts'
-
-const resend = new Resend(process.env.RESEND_API_KEY!)
 
 // ─── shared ticket-creation / thread-continuation logic ───────────────────────
 
@@ -31,13 +29,19 @@ function extractMessageIds(...headers: (string | undefined)[]): string[] {
 }
 
 // Strip RFC-style quoted text from email replies so only the new content is stored.
-function stripEmailQuotes(raw: string): string {
+export function stripEmailQuotes(raw: string): string {
   const lines = raw.split('\n')
   const result: string[] = []
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]
     const trimmed = line.trimStart()
     if (trimmed.startsWith('>')) break
     if (/^On .{0,300}wrote:\s*$/i.test(trimmed)) break
+    if (
+      /^On\s/i.test(trimmed) &&
+      !/wrote:/i.test(trimmed) &&
+      lines.slice(index + 1, index + 4).some(nextLine => /wrote:\s*$/i.test(nextLine.trim()))
+    ) break
     if (/^-{4,}[\s\w]*(original|forwarded)[\s\w]*message[\s\w]*-{4,}/i.test(trimmed)) break
     result.push(line)
   }
@@ -55,7 +59,7 @@ async function processInboundEmail(params: {
   references?: string
 }): Promise<{ ticket_id: string; action: 'ticket_created' | 'message_added' }> {
   const { from_email, from_name, subject, message_id, in_reply_to, references } = params
-  const body = stripEmailQuotes(params.body)
+  const body = stripEmailQuotes(params.body) || params.body.trim()
   const now = new Date()
 
   const threadCandidates = extractMessageIds(in_reply_to, references)
@@ -65,8 +69,12 @@ async function processInboundEmail(params: {
       orderBy: { created_at: 'desc' },
     })
     if (existing) {
+      if (!body) {
+        return { ticket_id: existing.id, action: 'message_added' }
+      }
+
       const wasAiResolved = existing.status === 'AI_RESOLVED'
-      const wasInProgress = existing.status === 'IN_PROGRESS'
+      const shouldReopen = ['AI_RESOLVED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(existing.status)
       await prisma.$transaction([
         prisma.message.create({
           data: { ticket_id: existing.id, body, sender_type: 'CUSTOMER', sent_at: now },
@@ -77,8 +85,8 @@ async function processInboundEmail(params: {
             last_customer_reply_at: now,
             last_updated_at: now,
             summary: null,
-            ...((wasAiResolved || wasInProgress) && { status: 'OPEN' }),
-            ...(wasAiResolved && { assigned_to_id: null }),
+            ...(shouldReopen && { status: 'OPEN' }),
+            ...(wasAiResolved && { assigned_to_id: null, is_ai_handled: false }),
           },
         }),
       ])
@@ -163,8 +171,43 @@ function parseFrom(from: string): { email: string; name: string | undefined } {
   return { email: from.trim(), name: undefined }
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+export function stripHtml(html: string): string {
+  const withoutQuoteContainers = html
+    .replace(
+      /<([a-z][\w:-]*)\b[^>]*(?:class|id)\s*=\s*(?:"[^"]*\b(?:gmail_quote|appendonsend)\b[^"]*"|'[^']*\b(?:gmail_quote|appendonsend)\b[^']*')[^>]*>[\s\S]*?<\/\1\s*>/gi,
+      '',
+    )
+    .replace(/<blockquote\b[^>]*>[\s\S]*?<\/blockquote\s*>/gi, '')
+
+  const withLineBreaks = withoutQuoteContainers
+    .replace(/<br\b[^>]*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+
+  const decoded = withLineBreaks.replace(
+    /&(amp|lt|gt|quot|nbsp);|&#(\d+);/gi,
+    (entity, named: string | undefined, numeric: string | undefined) => {
+      if (numeric) {
+        const codePoint = Number(numeric)
+        return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity
+      }
+      return {
+        amp: '&',
+        lt: '<',
+        gt: '>',
+        quot: '"',
+        nbsp: ' ',
+      }[named!.toLowerCase()]!
+    },
+  )
+
+  return decoded
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(line => line.trim().replace(/[ \t]+/g, ' '))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export interface ResendEvent {
@@ -183,7 +226,7 @@ export async function processResendEvent(event: ResendEvent) {
   }
 
   // Fetch full email content (body + headers not in webhook payload)
-  const { data: email, error: fetchError } = await resend.emails.receiving.get(event.data.email_id)
+  const { data: email, error: fetchError } = await getResendClient().emails.receiving.get(event.data.email_id)
   if (fetchError || !email) {
     console.error('[resend] failed to fetch email content', fetchError)
     throw new Error('Failed to fetch email content')

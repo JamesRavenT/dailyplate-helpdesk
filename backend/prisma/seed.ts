@@ -36,16 +36,16 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
   {
     category: TicketCategory.ACCOUNT,
     title: 'Subscription Management',
-    content: `- Customers can view and modify their subscription plan at https://dailyplate.fakesite/account/subscription.
+    content: `- Customers can view and modify their subscription plan at https://dailyplate.example/account/subscription.
 - **Upgrade/Downgrade:** Changes take effect at the start of the next billing cycle. Inform the customer of the change date.
-- **Cancellation:** Customers can cancel at https://dailyplate.fakesite/account/cancel. Cancellations made before midnight on the day before the next billing date prevent the next charge. No pro-rated refunds for mid-cycle cancellations except in exceptional circumstances (see Payment SOP).
+- **Cancellation:** Customers can cancel at https://dailyplate.example/account/cancel. Cancellations made before midnight on the day before the next billing date prevent the next charge. No pro-rated refunds for mid-cycle cancellations except in exceptional circumstances (see Payment SOP).
 - **Pausing a subscription:** Customers can pause for up to 8 weeks via the account dashboard. Pausing beyond 8 weeks requires escalation to a senior agent.
 - **Reactivation:** Cancelled subscriptions can be reactivated at any time. Previous meal preferences are retained for 90 days.`,
   },
   {
     category: TicketCategory.ACCOUNT,
     title: 'Password Reset',
-    content: `1. Direct the customer to https://dailyplate.fakesite/reset-password.
+    content: `1. Direct the customer to https://dailyplate.example/reset-password.
 2. Instruct them to enter the email address associated with their account and click "Send Reset Link."
 3. The reset link is valid for 30 minutes. If expired, they should request a new one.
 4. If the reset email does not arrive: advise checking the spam/junk folder; confirm the correct email was used.
@@ -54,9 +54,9 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
   {
     category: TicketCategory.ACCOUNT,
     title: 'Account Detail Changes',
-    content: `- **Name / phone:** Customers can update these at https://dailyplate.fakesite/account/settings.
+    content: `- **Name / phone:** Customers can update these at https://dailyplate.example/account/settings.
 - **Email change:** Requires verification of both the old and new email addresses. Customer initiates the change in settings and must confirm via both inboxes.
-- **Delivery address change:** Can be updated at https://dailyplate.fakesite/account/address. Changes to pending orders must be submitted before 11:00 PM the night prior to the scheduled delivery date. After that cutoff, the delivery cannot be redirected.`,
+- **Delivery address change:** Can be updated at https://dailyplate.example/account/address. Changes to pending orders must be submitted before 11:00 PM the night prior to the scheduled delivery date. After that cutoff, the delivery cannot be redirected.`,
   },
   {
     category: TicketCategory.ACCOUNT,
@@ -94,7 +94,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
    - Ask the customer to check their doorstep, building lobby, or with a neighbour.
    - If still not found, treat as a missing delivery: issue a full refund or free replacement (customer's choice). Log a missing delivery report.
 4. If status shows "In Transit" or "Out for Delivery": follow the Late Delivery SOP.
-5. If status shows "Failed Delivery" (no one home, access issue): advise the customer that a redelivery can be scheduled at https://dailyplate.fakesite/account/deliveries. Failed deliveries due to customer unavailability may incur a redelivery fee per the Terms of Service.`,
+5. If status shows "Failed Delivery" (no one home, access issue): advise the customer that a redelivery can be scheduled at https://dailyplate.example/account/deliveries. Failed deliveries due to customer unavailability may incur a redelivery fee per the Terms of Service.`,
   },
   {
     category: TicketCategory.DELIVERY,
@@ -123,7 +123,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
     category: TicketCategory.TECHNICAL,
     title: 'Cannot Log In',
     content: `1. Ask which login method the customer uses (email/password, Google, or Apple).
-2. **Incorrect password:** Direct to https://dailyplate.fakesite/reset-password (see Password Reset SOP for full steps).
+2. **Incorrect password:** Direct to https://dailyplate.example/reset-password (see Password Reset SOP for full steps).
 3. **Account locked (too many failed attempts):** The account auto-unlocks after 15 minutes. If the customer cannot wait, escalate to admin for a manual unlock.
 4. **"Email not recognised" error:** The email may not be registered. Ask the customer to try alternative emails. If none work, they may need to create a new account.
 5. **Google / Apple sign-in fails:** Ask the customer to clear browser cookies and cache, then retry. If the issue persists on mobile, advise updating the DailyPlate app to the latest version.
@@ -147,7 +147,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
 2. Ask for any error message and the steps the customer took before the issue occurred.
 3. Advise clearing cache/cookies (web) or reinstalling the app (mobile).
 4. If the issue is widespread or reproducible: log a bug report and inform the customer that the technical team has been notified. Provide a realistic ETA if a known outage is in progress.
-5. Check the system status page at https://dailyplate.fakesite/status before responding — if a known incident is listed, reference it.`,
+5. Check the system status page at https://dailyplate.example/status before responding — if a known incident is listed, reference it.`,
   },
   {
     category: TicketCategory.TECHNICAL,
@@ -167,7 +167,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
   {
     category: TicketCategory.VOUCHER,
     title: 'Redeeming a Voucher / Gift Card',
-    content: `1. Direct the customer to https://dailyplate.fakesite/checkout and look for the "Promo/Gift Card" field at the checkout summary.
+    content: `1. Direct the customer to https://dailyplate.example/checkout and look for the "Promo/Gift Card" field at the checkout summary.
 2. The code is case-insensitive. Common issues: spaces at the start/end of the code, letter "O" vs digit "0", letter "I" vs digit "1".
 3. If the code shows "Invalid code": confirm the exact code with the customer (ask them to copy-paste it). Verify in the admin portal that the code exists and is active.
 4. If the code shows "Expired": check the expiry date in the admin portal. Expired promotional codes cannot be extended without manager approval. Escalate if the customer received the code with a different stated expiry.
@@ -209,7 +209,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
     content: `1. Ask the customer which card they are attempting to use and whether it is a debit or credit card.
 2. Common reasons for a decline (as reported by Stripe):
    - **Insufficient funds:** Advise the customer to ensure funds are available or use a different card.
-   - **Card expired:** Ask them to update their payment method at https://dailyplate.fakesite/account/billing.
+   - **Card expired:** Ask them to update their payment method at https://dailyplate.example/account/billing.
    - **Bank blocked the transaction:** This often happens with new cards or international transactions. Ask the customer to call their bank to authorise DailyPlate charges, then retry.
    - **Incorrect card details:** Ask the customer to re-enter their card details carefully.
 3. If the customer's card is valid and still being declined: escalate to the technical team — there may be a Stripe configuration issue.
@@ -250,7 +250,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
     category: TicketCategory.MENU,
     title: 'Browsing & Selecting Meals',
     content: `- The weekly menu is published every Friday at 6 PM for the following week.
-- Customers can view and select meals at https://dailyplate.fakesite/menu.
+- Customers can view and select meals at https://dailyplate.example/menu.
 - Selections must be finalised by Sunday 11:59 PM for the upcoming delivery week. After this cutoff, the system auto-assigns the "Chef's Choice" selection.
 - Remind customers to select their meals before the Sunday deadline to avoid getting the default selection.`,
   },
@@ -258,8 +258,8 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
     category: TicketCategory.MENU,
     title: 'Dietary Requirements & Filters',
     content: `- The DailyPlate menu includes labels for: Vegetarian, Vegan, Gluten-Free, Dairy-Free, Nut-Free, and Low-Calorie.
-- Customers can set their dietary preferences permanently at https://dailyplate.fakesite/account/preferences — this pre-filters the menu to show only suitable meals.
-- DailyPlate **cannot guarantee** a completely allergen-free environment as meals are prepared in shared kitchens. Customers with severe allergies should be advised to review full ingredient lists at https://dailyplate.fakesite/menu/ingredients.
+- Customers can set their dietary preferences permanently at https://dailyplate.example/account/preferences — this pre-filters the menu to show only suitable meals.
+- DailyPlate **cannot guarantee** a completely allergen-free environment as meals are prepared in shared kitchens. Customers with severe allergies should be advised to review full ingredient lists at https://dailyplate.example/menu/ingredients.
 - If a customer has a serious allergy not covered by existing filters, advise them to contact us before ordering so the nutrition team can assist.`,
   },
   {
@@ -272,7 +272,7 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
   {
     category: TicketCategory.MENU,
     title: 'Missing or Incorrect Meal Preference Applied',
-    content: `1. Confirm the customer's saved preferences at https://dailyplate.fakesite/account/preferences.
+    content: `1. Confirm the customer's saved preferences at https://dailyplate.example/account/preferences.
 2. If their preferences are saved correctly but the wrong meal was sent: treat as a wrong order — see Wrong Order Delivered SOP.
 3. If no preference was saved: remind the customer to save preferences before the Sunday cutoff.`,
   },
@@ -301,37 +301,37 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
   {
     category: TicketCategory.INQUIRY,
     title: 'DailyPlate Website',
-    content: `Customers can browse plans, manage their account, select meals, and get support at https://dailyplate.fakesite.`,
+    content: `Customers can browse plans, manage their account, select meals, and get support at https://dailyplate.example.`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'Delivery Areas',
-    content: `DailyPlate currently delivers to major cities and surrounding areas. Customers can check if their postcode is covered during the sign-up flow at https://dailyplate.fakesite/plans.`,
+    content: `DailyPlate currently delivers to major cities and surrounding areas. Customers can check if their postcode is covered during the sign-up flow at https://dailyplate.example/plans.`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'Pricing',
-    content: `Plans start from a competitive per-serving rate. All plans include free delivery. Full pricing is listed at https://dailyplate.fakesite/plans. Do not quote specific prices in support tickets as these may change — always direct customers to the pricing page.`,
+    content: `Plans start from a competitive per-serving rate. All plans include free delivery. Full pricing is listed at https://dailyplate.example/plans. Do not quote specific prices in support tickets as these may change — always direct customers to the pricing page.`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'Customer Support Channels',
     content: `- **Support hours:** Monday–Saturday, 8 AM – 8 PM
-- **Email:** support@dailyplate.fakesite
-- **Help centre:** https://dailyplate.fakesite/help
+- **Email:** support@dailyplate.example
+- **Help centre:** https://dailyplate.example/help
 - **Live chat:** Available on the website during support hours`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'Other Contact Information',
-    content: `- **General enquiries:** hello@dailyplate.fakesite
-- **Corporate / bulk orders:** corporate@dailyplate.fakesite
-- **Press / media:** press@dailyplate.fakesite`,
+    content: `- **General enquiries:** hello@dailyplate.example
+- **Corporate / bulk orders:** corporate@dailyplate.example
+- **Press / media:** press@dailyplate.example`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'Common Customer Questions — Quick Answers',
-    content: `- "Is DailyPlate available in my area?" → Ask the customer to check https://dailyplate.fakesite/plans.
+    content: `- "Is DailyPlate available in my area?" → Ask the customer to check https://dailyplate.example/plans.
 - "How does the subscription work?" → Customers choose a plan, select meals each week before Sunday 11:59 PM, and receive delivery Monday–Saturday.
 - "Can I try it without committing?" → Yes, DailyPlate offers a first-box discount for new subscribers. No long-term commitment; cancel anytime.
 - "Is DailyPlate eco-friendly?" → Yes. Packaging is made from recyclable and compostable materials. Customers can drop off ice packs and insulated liners at the next delivery for recycling.`,
@@ -345,12 +345,12 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
     content: `- DailyPlate is a weekly meal kit and ready-meal subscription service.
 - Customers choose a plan based on the number of people and meals per week (e.g., 2 people × 3 meals/week).
 - Meals are delivered fresh in recyclable insulated boxes.
-- The website is at https://dailyplate.fakesite. Customers can sign up, manage their account, and browse menus there.`,
+- The website is at https://dailyplate.example. Customers can sign up, manage their account, and browse menus there.`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'Subscription Plans & Pricing',
-    content: `- Plans are listed at https://dailyplate.fakesite/plans.
+    content: `- Plans are listed at https://dailyplate.example/plans.
 - Pricing is per serving and varies by plan tier. Refer customers to the pricing page for current rates — do not quote specific prices in support tickets, as they may change.
 - All plans include free delivery.
 - Annual plans offer a discount vs. monthly; customers can compare on the pricing page.`,
@@ -358,16 +358,16 @@ const DEFAULT_ARTICLES: { title: string; category: TicketCategory; content: stri
   {
     category: TicketCategory.INQUIRY,
     title: 'Common How-To Questions',
-    content: `- **How do I skip a week?** Go to https://dailyplate.fakesite/account/deliveries and toggle the week off before the Sunday cutoff.
-- **How do I change my delivery day?** Delivery days are set at signup based on postcode. Day changes can be requested at https://dailyplate.fakesite/account/address — subject to route availability.
-- **How do I update my meal count?** Go to https://dailyplate.fakesite/account/subscription and choose a new plan.
-- **How do I refer a friend?** The referral programme is at https://dailyplate.fakesite/refer. The customer gets a shareable link; both parties receive a discount when the referred friend completes their first delivery.`,
+    content: `- **How do I skip a week?** Go to https://dailyplate.example/account/deliveries and toggle the week off before the Sunday cutoff.
+- **How do I change my delivery day?** Delivery days are set at signup based on postcode. Day changes can be requested at https://dailyplate.example/account/address — subject to route availability.
+- **How do I update my meal count?** Go to https://dailyplate.example/account/subscription and choose a new plan.
+- **How do I refer a friend?** The referral programme is at https://dailyplate.example/refer. The customer gets a shareable link; both parties receive a discount when the referred friend completes their first delivery.`,
   },
   {
     category: TicketCategory.INQUIRY,
     title: 'General Inquiries — Escalation Triggers',
-    content: `- Customer asks a detailed business/legal/press question — redirect to hello@dailyplate.fakesite.
-- Customer requests information about corporate or bulk orders — redirect to corporate@dailyplate.fakesite.`,
+    content: `- Customer asks a detailed business/legal/press question — redirect to hello@dailyplate.example.
+- Customer requests information about corporate or bulk orders — redirect to corporate@dailyplate.example.`,
   },
 
   // ── OTHER ──────────────────────────────────────────────────────────────────

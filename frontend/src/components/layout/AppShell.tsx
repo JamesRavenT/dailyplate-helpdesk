@@ -13,11 +13,21 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { useIdleLogout } from '@/hooks/useIdleLogout'
 import { cn } from '@/lib/utils'
 import { authClient } from '@/lib/auth-client'
+import { endSession } from '@/lib/session'
 
 type AgentStatus = 'ONLINE' | 'AWAY' | 'MEETING' | 'OFFLINE'
 
@@ -139,8 +149,8 @@ function SidebarContent({
 
 export default function AppShell() {
   const { data: session } = authClient.useSession()
-  const navigate = useNavigate()
   const location = useLocation()
+  const { showWarning, remainingSeconds, staySignedIn } = useIdleLogout()
   const user = session?.user as SessionUser | undefined
   const isAdmin = user?.role === 'ADMIN'
   const sessionStatus = user?.online_status
@@ -217,12 +227,31 @@ export default function AppShell() {
     if (!isAdmin) {
       await axios.patch('/api/users/status', { status: 'OFFLINE' }).catch(() => {})
     }
-    await authClient.signOut()
-    navigate('/login')
+    await endSession('/login')
   }
+
+  const warningMinutes = Math.floor(remainingSeconds / 60)
+  const warningSeconds = remainingSeconds % 60
+  const warningCountdown = `${warningMinutes}:${warningSeconds.toString().padStart(2, '0')}`
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <Dialog open={showWarning}>
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Your session is about to expire</DialogTitle>
+            <DialogDescription>
+              You will be signed out after {warningCountdown} of inactivity.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => void staySignedIn()}>
+              Stay signed in
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <a
         href="#main-content"
         className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-lg bg-primary px-3 py-2 text-label font-medium text-primary-foreground shadow-e2 transition-transform focus:translate-y-0 motion-reduce:transition-none"

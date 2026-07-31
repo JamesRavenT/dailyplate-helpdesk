@@ -21,6 +21,7 @@ dashboard when you create or sync the Blueprint.
 | `FRONTEND_URL` | ✅ | Trusted origin. In production this is the **Cloudflare** URL. |
 | `SEED_ADMIN_EMAIL` | ✅ | Initial admin email (seeded on first boot, idempotent). |
 | `SEED_ADMIN_PASSWORD` | ✅ | Initial admin password. |
+| `AI_PROVIDER` | — | `openai` (default when unset) or deterministic `stub`. The stub is rejected when `NODE_ENV=production`. |
 | `OPENAI_API_KEY` | ✅ | OpenAI key — inbound triage **and** ticket summarize/polish. |
 | `RESEND_API_KEY` | ✅ | Resend key — outbound replies + inbound email fetch. |
 | `RESEND_FROM_EMAIL` | ✅ | Verified sender address. |
@@ -43,8 +44,18 @@ dashboard when you create or sync the Blueprint.
 > [`frontend/wrangler.jsonc`](../../frontend/wrangler.jsonc) as a per-environment Worker
 > variable — **not** in `.env`.
 
-## E2E (`e2e/.env` / CI)
+## E2E (`backend/.env.test.example` / process environment)
+
+The checked-in [`backend/.env.test.example`](../../backend/.env.test.example) is the local E2E
+fixture; there is no loaded `e2e/.env` file. The fixture is passed to the backend by
+[`e2e/playwright.config.ts`](../../e2e/playwright.config.ts), parsed by
+[`e2e/global-setup.ts`](../../e2e/global-setup.ts), and read by
+[`e2e/tests/internal.spec.ts`](../../e2e/tests/internal.spec.ts). Playwright also sets or
+overrides selected process variables for each run.
 
 | Variable | Required | Description |
 |---|---|---|
+| `AI_PROVIDER` | default suite | Set to `stub` by the fixture and Playwright for deterministic, network-free triage. The opt-in real-AI run overrides it to `openai`. |
 | `DEPLOYED_BASE_URL` | — | Target URL for the opt-in deployment smoke test project. |
+| `RUN_REAL_OPENAI` | — | Set to `1` to include the opt-in, paid `real-openai` Playwright project. Requires `OPENAI_API_KEY`. |
+| `OPENAI_API_KEY` | real AI only | Real key forwarded only to the opt-in project; the default suite explicitly blanks it for the backend child process. |

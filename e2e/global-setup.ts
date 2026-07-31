@@ -5,8 +5,15 @@ import * as path from 'path'
 import * as dotenv from 'dotenv'
 
 const backendDir = path.resolve(__dirname, '../backend')
-const testEnv = dotenv.parse(fs.readFileSync(path.join(backendDir, '.env.test'), 'utf-8'))
-const env = { ...process.env, ...testEnv }
+const testEnv = dotenv.parse(fs.readFileSync(path.join(backendDir, '.env.test.example'), 'utf-8'))
+const env = {
+  ...process.env,
+  ...testEnv,
+  // Match the backend webServer: the deterministic suite must not inherit a paid API key.
+  OPENAI_API_KEY: process.env.RUN_REAL_OPENAI === '1'
+    ? (process.env.OPENAI_API_KEY ?? '')
+    : '',
+}
 
 // bun is not on PATH in all shell contexts — resolve it from the known install location
 const bun = process.platform === 'win32'

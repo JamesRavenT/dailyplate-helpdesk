@@ -51,7 +51,7 @@
       "position": [672, 0],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.HELPDESK_BACKEND_URL }}/api/internal/resend-inbound",
+        "url": "https://your-backend.onrender.com/api/internal/resend-inbound",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -92,10 +92,10 @@
       "typeVersion": 1,
       "position": [-50, -50],
       "parameters": {
-        "content": "## Resend Inbound Gateway\nVerifies the Svix signature on Resend inbound-email webhooks and forwards valid events to the Helpdesk backend at /api/internal/resend-inbound.\n\nRequired n8n environment variables: RESEND_INBOUND_SECRET (Svix secret, whsec_...) and HELPDESK_BACKEND_URL (Render backend base URL).\n\nRequired credential: httpHeaderAuth named \"DailyPlate Internal Token\" with Name = X-Internal-Token and Value = INTERNAL_API_TOKEN (must match Render).",
+        "content": "## Resend Inbound Gateway\nVerifies the Svix signature on Resend inbound-email webhooks and forwards valid events to the Helpdesk backend at /api/internal/resend-inbound.\n\nThe backend URL is HARDCODED on the Forward to Helpdesk node (https://your-backend.onrender.com) — it is not a secret. After import, replace your-backend with your Render service hostname. Use the onrender.com host, NOT the public Cloudflare application domain, which blocks /api/internal/* at the edge.\n\nRequired n8n environment variable: RESEND_INBOUND_SECRET (Svix secret, whsec_...).\n\nTwo independent Code-node requirements:\n1. $env access: set N8N_BLOCK_ENV_ACCESS_IN_NODE=false on the n8n instance, or verification fails with missing_secret and every request 401s.\n2. crypto import with task runners: in /etc/n8n-task-runners.json, set { \"task-runners\": [ { \"runner-type\": \"javascript\", \"env-overrides\": { \"NODE_FUNCTION_ALLOW_BUILTIN\": \"crypto\" } } ] }. A container environment variable is not sufficient. Without this, require('crypto') fails with Module 'crypto' is disallowed.\n\nRequired credential: httpHeaderAuth with Name = X-Internal-Token and Value = INTERNAL_API_TOKEN (must match Render). It must be SELECTED on the Forward to Helpdesk node, not merely created.",
         "color": 4,
-        "width": 300,
-        "height": 200
+        "width": 500,
+        "height": 360
       }
     }
   ],

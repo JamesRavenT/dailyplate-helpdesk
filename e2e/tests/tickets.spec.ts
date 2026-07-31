@@ -163,14 +163,14 @@ apiTest.describe('inbound email webhook', () => {
   apiTest('rejects a request with the wrong secret', async ({ request }) => {
     const res = await request.post(WEBHOOK_URL, {
       headers: { 'X-Webhook-Secret': 'wrong-secret' },
-      data: { from_email: 'x@x.com', subject: 'test', body: 'test' },
+      data: { from_email: 'x@example.com', subject: 'test', body: 'test' },
     })
     apiExpect(res.status()).toBe(401)
   })
 
   apiTest('rejects a request with no secret header', async ({ request }) => {
     const res = await request.post(WEBHOOK_URL, {
-      data: { from_email: 'x@x.com', subject: 'test', body: 'test' },
+      data: { from_email: 'x@example.com', subject: 'test', body: 'test' },
     })
     apiExpect(res.status()).toBe(401)
   })
@@ -178,7 +178,7 @@ apiTest.describe('inbound email webhook', () => {
   apiTest('rejects a payload missing subject', async ({ request }) => {
     const res = await request.post(WEBHOOK_URL, {
       headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
-      data: { from_email: 'x@x.com', body: 'test' },
+      data: { from_email: 'x@example.com', body: 'test' },
     })
     apiExpect(res.status()).toBe(400)
   })
@@ -186,7 +186,7 @@ apiTest.describe('inbound email webhook', () => {
   apiTest('rejects a payload missing body', async ({ request }) => {
     const res = await request.post(WEBHOOK_URL, {
       headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
-      data: { from_email: 'x@x.com', subject: 'test' },
+      data: { from_email: 'x@example.com', subject: 'test' },
     })
     apiExpect(res.status()).toBe(400)
   })
@@ -200,11 +200,146 @@ apiTest.describe('inbound email webhook', () => {
   })
 })
 
+test.describe('customer email replies', () => {
+  test('reopens a closed ticket', async ({ adminPage: page, request }) => {
+    const { res, messageId } = await createTicketViaWebhook(request)
+    const { ticket_id } = await res.json()
+    await waitForTicketSettled(page, ticket_id)
+
+    const statusRes = await page.request.patch(`http://localhost:3001/api/tickets/${ticket_id}`, {
+      data: { status: 'CLOSED' },
+    })
+    expect(statusRes.ok()).toBe(true)
+
+    const replyRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: {
+        from_email: 'alice@example.com',
+        subject: 'Re: Help with my account',
+        body: 'I still need help.',
+        message_id: uniqueMessageId(),
+        in_reply_to: messageId,
+        references: messageId,
+      },
+    })
+    expect(replyRes.status()).toBe(200)
+
+    const ticketRes = await page.request.get(`http://localhost:3001/api/tickets/${ticket_id}`)
+    expect(ticketRes.ok()).toBe(true)
+    const ticket = await ticketRes.json()
+    expect(ticket.status).toBe('OPEN')
+  })
+
+  test('reopens an assigned resolved ticket and retains its assignee', async ({
+    adminPage: page,
+    request,
+  }) => {
+    const { res, messageId } = await createTicketViaWebhook(request)
+    const { ticket_id } = await res.json()
+    await waitForTicketSettled(page, ticket_id)
+    const agentId = await getTestAgentId(page)
+    await assignTicket(page, ticket_id, agentId)
+
+    const statusRes = await page.request.patch(`http://localhost:3001/api/tickets/${ticket_id}`, {
+      data: { status: 'RESOLVED' },
+    })
+    expect(statusRes.ok()).toBe(true)
+
+    const replyRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: {
+        from_email: 'alice@example.com',
+        subject: 'Re: Help with my account',
+        body: 'The issue has returned.',
+        message_id: uniqueMessageId(),
+        in_reply_to: messageId,
+        references: messageId,
+      },
+    })
+    expect(replyRes.status()).toBe(200)
+
+    const ticketRes = await page.request.get(`http://localhost:3001/api/tickets/${ticket_id}`)
+    expect(ticketRes.ok()).toBe(true)
+    const ticket = await ticketRes.json()
+    expect(ticket.status).toBe('OPEN')
+    expect(ticket.assigned_to_id).toBe(agentId)
+  })
+
+  test('stores only new customer reply text before a wrapped Gmail attribution', async ({
+    adminPage: page,
+    request,
+  }) => {
+    const { res, messageId } = await createTicketViaWebhook(request)
+    const { ticket_id } = await res.json()
+    await waitForTicketSettled(page, ticket_id)
+    const newText = 'Here is the new information you requested.'
+
+    const replyRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: {
+        from_email: 'alice@example.com',
+        subject: 'Re: Help with my account',
+        body: `${newText}\n\nOn Fri, Jul 31, 2026 at 3:39 PM DailyPlate Support contact@dailyplate.help\nwrote:\n> Previous support reply`,
+        message_id: uniqueMessageId(),
+        in_reply_to: messageId,
+        references: messageId,
+      },
+    })
+    expect(replyRes.status()).toBe(200)
+
+    const ticketRes = await page.request.get(`http://localhost:3001/api/tickets/${ticket_id}`)
+    expect(ticketRes.ok()).toBe(true)
+    const ticket = await ticketRes.json()
+    const customerMessages = ticket.messages.filter(
+      (message: { sender_type: string }) => message.sender_type === 'CUSTOMER',
+    )
+    expect(customerMessages.at(-1)?.body).toBe(newText)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Tickets list — integration tests only
 // ---------------------------------------------------------------------------
 
 test.describe('tickets list', () => {
+  test('deterministic AI worker covers auto-resolution for a general voucher question', async ({
+    adminPage: page,
+    request,
+  }) => {
+    const { res } = await createTicketViaWebhook(request, {
+      subject: 'How do I use a voucher code?',
+      body: 'Where can I enter a voucher code during checkout?',
+    })
+    const { ticket_id } = await res.json()
+
+    await waitForTicketSettled(page, ticket_id)
+    const ticketRes = await page.request.get(`http://localhost:3001/api/tickets/${ticket_id}`)
+    const ticket = await ticketRes.json()
+
+    expect(ticket.status).toBe('AI_RESOLVED')
+    expect(ticket.category).toBe('VOUCHER')
+    expect(ticket.priority).toBe('LOW')
+    expect(ticket.is_ai_handled).toBe(true)
+    expect(ticket.messages.some((message: { sender_type: string }) => message.sender_type === 'AI')).toBe(true)
+  })
+
+  test('deterministic AI worker covers escalation for an account-specific issue', async ({
+    adminPage: page,
+    request,
+  }) => {
+    const { res } = await createTicketViaWebhook(request)
+    const { ticket_id } = await res.json()
+
+    await waitForTicketSettled(page, ticket_id)
+    const ticketRes = await page.request.get(`http://localhost:3001/api/tickets/${ticket_id}`)
+    const ticket = await ticketRes.json()
+
+    expect(ticket.status).toBe('OPEN')
+    expect(ticket.category).toBe('ACCOUNT')
+    expect(ticket.is_ai_handled).toBe(false)
+    expect(ticket.messages.some((message: { sender_type: string }) => message.sender_type === 'AI')).toBe(false)
+  })
+
   test('ticket created via webhook appears in the admin list (real pipeline)', async ({
     adminPage: page,
     request,

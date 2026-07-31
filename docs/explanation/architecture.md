@@ -85,20 +85,77 @@ on Render behind `POST /api/internal/resend-inbound`, which is guarded by a timi
 reply polishing, it stays on Render — so n8n's cost benefit is marginal. Its real value is
 architectural (event-driven front door, resilience) rather than a lower bill.
 
+### Replies to an existing thread
+
+A reply matched to an existing ticket reopens it to `OPEN` from any of `AI_RESOLVED`,
+`IN_PROGRESS`, `RESOLVED`, or `CLOSED` — a customer who writes back must never land in a closed
+ticket nobody is watching. Reopening does not re-run AI triage. Only the `AI_RESOLVED` case clears
+`assigned_to_id` and resets `is_ai_handled` to `false`, so the ticket returns to the queue and a
+later human resolution is not counted as AI-resolved. A ticket resolved or closed by a person keeps
+its assignee and reappears in that agent's queue, which is scoped to `OPEN`/`IN_PROGRESS`.
+
+**Known limitation — dashboard metrics are current-state, not historical.** Every "resolved"
+figure, including the 30-day activity chart, is derived from each ticket's status *right now*;
+there is no `resolved_at` column or status history in the schema. Reopening a ticket therefore
+removes it from the resolved counts for the day it was originally resolved, rather than recording
+"resolved, then reopened". Fixing this properly needs a status-history model.
+
+Quoted text is stripped from the stored message so agents read only what the customer just wrote.
+The plain-text path drops `>`-prefixed blocks, original/forwarded-message separators, and `On …
+wrote:` attributions including the multi-line form Gmail produces when the attribution wraps before
+`wrote:`. The HTML path removes `blockquote` and Gmail/Outlook quote containers, converts block tags
+to newlines, and decodes entities — the newline handling matters, because collapsing all whitespace
+would leave the quote stripper with no line structure to work with. If stripping would empty the
+body entirely, the raw text is kept rather than storing a blank message.
+
 ## Asynchronous AI processing
 
 New tickets are enqueued to **pg-boss** and processed by a worker off the request path, so
-webhook/API responses return immediately and AI work is retry-safe. The AI is constrained by
-prompt to answer only policy-only questions and to never claim account-specific actions; if it
-can't safely resolve, the ticket is round-robin assigned to an available agent (load-capped at
-5 concurrent open tickets each).
+webhook/API responses return immediately. pg-boss automatically retries failed jobs, but the
+batch handler has no idempotency guard; a retry after partial processing could repeat effects.
+The AI is constrained by prompt to answer only policy-only questions and to never claim
+account-specific actions; if it can't safely resolve, the ticket is round-robin assigned to an
+available agent (load-capped at 5 concurrent open tickets each).
+
+**Known issue — agent availability differs between two assignment paths.** New-ticket
+round-robin assignment selects only agents whose status is `ONLINE`. Queue draining runs when an
+agent changes status to either `ONLINE` or `AWAY`, so an `AWAY` agent can receive queued work
+through that separate path. This inconsistency is not intentional and needs follow-up.
 
 ## Authentication
 
 Database-session based (no JWTs), via Better Auth. Sessions live in the Postgres `session`
-table with a 7-day expiry. **Sign-up is disabled** — the first admin is seeded and further users
-are created by admins from the UI. Roles (`ADMIN` / `AGENT`) are a custom field on the user and
-enforced by `requireAuth` / `requireAdmin` on every route.
+table with a 1-hour expiry and a 5-minute refresh age. **Sign-up is disabled** — the first admin
+is seeded and further users are created by admins from the UI. Roles (`ADMIN` / `AGENT`) are a custom field on the user and
+enforced by `requireAuth` / `requireAdmin` on protected business-data routes. Public health and
+API-root endpoints, Better Auth's own handler, the development-only shared-secret webhook, and
+the token-authenticated internal routes have separate boundaries.
+
+### Inactivity timeout
+
+Agents are signed out after 60 minutes without interaction, with a warning dialog at 55 minutes.
+
+The mechanism is not obvious, and the obvious implementation does not work. `requireAuth` resolves
+the session by calling `auth.api.getSession()` internally and never forwards Better Auth's
+refreshed `Set-Cookie` onto the Express response — only `/api/auth/*` routes pass through the real
+Better Auth handler. So ordinary API traffic cannot slide the browser cookie. At the same time the
+dashboard polls every 15–30 seconds, which means a purely server-side rolling window would never
+expire while a tab sat open, and a purely server-side fixed window would sign out an agent in the
+middle of active work.
+
+Idle is therefore measured client-side from genuine interaction (`useIdleLogout`), and the cookie
+is refreshed by an explicit `authClient.getSession()` call on real user activity, throttled to once
+every five minutes. Activity is shared between tabs through `localStorage`. The 1-hour server
+expiry is the backstop for a closed or backgrounded tab. Idle is evaluated on a single 30-second
+tick rather than a timer per input event, so the warning and the logout can fire up to 30 seconds
+late.
+
+A global axios response interceptor (`lib/http.ts`) ends the session on `401 {"error":"Unauthorized"}`
+or `403 {"error":"Account is locked"}`. It deliberately matches those exact shapes rather than any
+401, because the admin delete/lock dialogs use `401 {"error":"Incorrect password"}` for a mistyped
+confirmation password and must keep surfacing that in place. Sign-out is funnelled through one
+guarded `endSession()` helper (`lib/session.ts`) shared by the interceptor, the idle timer, and the
+manual sign-out button, so a failing request and a deliberate sign-out cannot race.
 
 ## Frontend design system
 

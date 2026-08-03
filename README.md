@@ -157,7 +157,7 @@ discussion, including why the inbound pipeline is split between n8n and the Rend
 | **Automation** | n8n — inbound webhook gateway (Svix verification + forwarding) |
 | **Validation / security** | Zod, Helmet, CORS, express-rate-limit |
 | **Monitoring** | Sentry (`@sentry/node`, `@sentry/react`) |
-| **Testing** | Vitest + React Testing Library (component), Playwright + Allure (E2E) |
+| **Testing** | Bun (backend units), Vitest + React Testing Library (component), Playwright + Allure (E2E), playwright-bdd (Gherkin) |
 | **Hosting** | Cloudflare Workers (SPA + API proxy), Render (backend, Docker), Neon (database), n8n on a GCP VM |
 
 ---
@@ -206,7 +206,7 @@ helpdesk/
 ├── render.yaml              # Render Blueprint: Docker web service, health check, env vars
 ├── backend/
 │   ├── Dockerfile.prod      # Production backend image (Render)
-│   ├── docker-entrypoint.sh # migrate deploy → seed → start (free plan has no pre-deploy hook)
+│   ├── docker-entrypoint.sh # migrate deploy → start (free plan has no pre-deploy hook)
 │   ├── src/
 │   │   ├── index.ts         # App entry (middleware, routes, boss startup)
 │   │   ├── instrument.ts    # dotenv + Sentry init (imported first)
@@ -293,7 +293,10 @@ Log in at `/login` with your `SEED_ADMIN_*` credentials.
 ## Testing
 
 ```bash
-# Component tests (Vitest + React Testing Library) — 124 tests
+# Backend unit tests (bun) — 18 tests
+cd backend && bun test
+
+# Component tests (Vitest + React Testing Library) — 131 tests
 cd frontend && npm run test:component     # CI run
 cd frontend && npm run test:watch         # watch mode
 
@@ -301,6 +304,10 @@ cd frontend && npm run test:watch         # watch mode
 docker compose up postgres-test -d
 cd e2e && npm test
 cd e2e && npm run report                  # generate + open the Allure report
+
+# BDD scenarios (playwright-bdd) — compiled from docs/reference/features/
+cd e2e && npm run test:bdd
+cd e2e && npm run test:bdd:critical       # also :smoke, :security
 ```
 
 The default E2E suite uses a deterministic, network-free AI stub. Live OpenAI triage validation
@@ -310,6 +317,12 @@ is a separate opt-in project that requires a real key and incurs API cost; see t
 **Test layering:** UI logic is covered by fast component tests; E2E is reserved for what needs
 the real backend (webhook → DB → API → UI pipelines, backend-enforced authorization, real
 mutations). Full strategy in [docs/explanation/testing-strategy.md](./docs/explanation/testing-strategy.md).
+
+**BDD:** business-readable Gherkin lives in [docs/reference/features/](./docs/reference/features/)
+as the living specification. `playwright-bdd` compiles it into Playwright specs, so it reuses the
+existing runner, fixtures and Allure pipeline rather than adding a parallel one. Scenarios tagged
+`@gap`, `@manual` or `@accepted-risk` are specification only and never execute. Risk register and
+release assessment in [docs/explanation/release-test-plan.md](./docs/explanation/release-test-plan.md).
 
 ---
 
@@ -412,6 +425,8 @@ Captured from the running app against seeded demo data (see [`docs/assets/`](./d
 | [docs/how-to/deploy.md](./docs/how-to/deploy.md) | How-to | Deploying to Cloudflare + Render + Neon + n8n |
 | [docs/explanation/architecture.md](./docs/explanation/architecture.md) | Explanation | System design and the key decisions behind it |
 | [docs/explanation/testing-strategy.md](./docs/explanation/testing-strategy.md) | Explanation | The component-vs-E2E testing layers |
+| [docs/explanation/release-test-plan.md](./docs/explanation/release-test-plan.md) | Explanation | Risk register, BDD framework decision, release assessment |
+| [docs/reference/features/](./docs/reference/features/) | Reference | Gherkin living specification |
 | [docs/reference/api.md](./docs/reference/api.md) | Reference | Backend endpoints and their auth boundaries |
 | [docs/reference/environment-variables.md](./docs/reference/environment-variables.md) | Reference | Every environment variable |
 | [LICENSE](./LICENSE) | License | MIT license terms |

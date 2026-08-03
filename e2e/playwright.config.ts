@@ -1,8 +1,17 @@
 import { defineConfig, devices } from '@playwright/test'
+import { defineBddConfig } from 'playwright-bdd'
 import path from 'path'
 import { ADMIN_STATE } from './tests/fixtures/auth'
 
 const runRealOpenAi = process.env.RUN_REAL_OPENAI === '1'
+const bddTestDir = defineBddConfig({
+  features: '../docs/reference/features/**/*.feature',
+  featuresRoot: '../docs/reference/features',
+  steps: 'steps/**/*.ts',
+  outputDir: '.features-gen',
+  tags: 'not @gap and not @manual and not @accepted-risk',
+  missingSteps: 'skip-scenario',
+})
 
 if (runRealOpenAi && !process.env.OPENAI_API_KEY) {
   throw new Error('RUN_REAL_OPENAI=1 requires OPENAI_API_KEY (this opt-in project incurs API cost)')
@@ -49,6 +58,12 @@ export default defineConfig({
         viewport: { width: 1440, height: 900 },
         storageState: ADMIN_STATE,
       },
+    },
+    {
+      name: 'bdd',
+      testDir: bddTestDir,
+      dependencies: ['setup'],
+      use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'deploy-smoke',

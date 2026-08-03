@@ -1,14 +1,16 @@
+import { lazy } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Login from './pages/Login'
-import Home from './pages/Home'
-import Users from './pages/Users'
-import Tickets from './pages/Tickets'
-import TicketDetail from './pages/TicketDetail'
-import Resources from './pages/Resources'
 import NotFound from './pages/NotFound'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
 import AppShell from './components/layout/AppShell'
+
+const Home = lazy(() => import('./pages/Home'))
+const Users = lazy(() => import('./pages/Users'))
+const Tickets = lazy(() => import('./pages/Tickets'))
+const TicketDetail = lazy(() => import('./pages/TicketDetail'))
+const Resources = lazy(() => import('./pages/Resources'))
 
 function App() {
   return (

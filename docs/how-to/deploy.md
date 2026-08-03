@@ -70,11 +70,43 @@ web service that builds [`backend/Dockerfile.prod`](../../backend/Dockerfile.pro
 3. **Apply** the Blueprint. Render builds the image and starts the service.
 4. **Migrations run at container start**, not as a pre-deploy step.
    [`backend/docker-entrypoint.sh`](../../backend/docker-entrypoint.sh) runs
-   `prisma migrate deploy`, then the idempotent seed (non-fatal if it fails), then `exec`s the
-   server. This is because Render's `preDeployCommand` requires a **paid** instance type; a
-   commented-out `preDeployCommand` line in `render.yaml` shows the paid-plan alternative.
+   `prisma migrate deploy`, then `exec`s the server. This is because Render's
+   `preDeployCommand` requires a **paid** instance type; a commented-out `preDeployCommand`
+   line in `render.yaml` shows the paid-plan alternative.
+
+   > **Seeding is not part of boot.** It used to run here, but on the free plan the container
+   > restarts on every cold start, so seeding on boot added two extra Prisma CLI processes —
+   > each opening its own connection to an autosuspended Neon compute — in front of the first
+   > byte of every wakeup. See [2a. Seed the admin account](#2a-seed-the-admin-account-one-off-provisioning).
 5. Watch the deploy logs until `/health` passes the health check. **Copy the service's
    `https://….onrender.com` URL** — this is your `BACKEND_ORIGIN` for the next step.
+
+### 2a. Seed the admin account (one-off provisioning)
+
+Seeding is an **explicit** operation, run once after the first successful migration — and again
+only when you need to recover the admin account or roll out changed SOP article content.
+[`backend/prisma/seed.ts`](../../backend/prisma/seed.ts) is idempotent and safe to re-run: it
+upserts the `SEED_ADMIN_*` account and re-applies the default SOP articles.
+
+Run it from a trusted environment with the production values for `DATABASE_URL`,
+`SEED_ADMIN_EMAIL`, and `SEED_ADMIN_PASSWORD` set:
+
+```bash
+cd backend
+bun run prisma:seed
+```
+
+> **Do not assume a Render shell is available.** Shell access is not offered on every instance
+> type, and this project targets the free plan. If the Render dashboard does not give you a
+> shell for this service, run the command locally against the production database using
+> temporary credentials, and rotate or revoke them afterwards.
+
+> **Why it is not guarded.** An obvious-looking optimisation is "skip the seed if the admin
+> already exists". Do not do this. After the admin lookup, the seed unconditionally deletes
+> obsolete articles and upserts every default SOP article, so an existence guard would silently
+> freeze SOP content at whatever shipped first and no later change would ever apply.
+
+---
 
 > **Free-plan behaviour:** a free Render web service **spins down after ~15 minutes of
 > inactivity** and takes roughly 30–60 seconds to cold-start on the next request. While it is

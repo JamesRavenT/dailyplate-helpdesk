@@ -46,6 +46,9 @@ e2e/allure-results/
 e2e/allure-report/
 e2e/blob-report/
 
+# playwright-bdd — generated from docs/reference/features/, never edit or commit
+e2e/.features-gen/
+
 # Private keys and certificates
 *.pem
 *.key

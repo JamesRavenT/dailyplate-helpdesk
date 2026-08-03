@@ -1,9 +1,10 @@
 # Render Blueprint — DailyPlate Helpdesk backend.
 # Docs: docs/how-to/deploy.md
 #
-# On the free plan, migrations run at container start via backend/docker-entrypoint.sh
-# because Render's preDeployCommand requires a paid instance type. On a paid plan, set
-# `plan: starter` below and uncomment the preDeployCommand line inside the service.
+# On the free plan, only migrations run at container start via backend/docker-entrypoint.sh;
+# database seeding is an explicit provisioning or recovery task. Render's preDeployCommand
+# requires a paid instance type. On a paid plan, set `plan: starter` below and uncomment
+# the preDeployCommand line inside the service.
 services:
   - type: web
     name: dailyplate-helpdesk-backend

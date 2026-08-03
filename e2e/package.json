@@ -6,6 +6,11 @@
     "test": "playwright test",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report",
+    "bddgen": "bddgen",
+    "test:bdd": "bddgen && playwright test --project=bdd",
+    "test:bdd:critical": "bddgen --tags \"@critical and not @gap and not @manual and not @accepted-risk\" && playwright test --project=bdd",
+    "test:bdd:smoke": "bddgen --tags \"@smoke and not @gap and not @manual and not @accepted-risk\" && playwright test --project=bdd",
+    "test:bdd:security": "bddgen --tags \"@security and not @gap and not @manual and not @accepted-risk\" && playwright test --project=bdd",
     "report": "allure generate allure-results --clean -o allure-report && allure open allure-report",
     "report:generate": "allure generate allure-results --clean -o allure-report"
   },
@@ -13,6 +18,8 @@
     "@playwright/test": "^1.50.0",
     "allure-commandline": "^2.29.0",
     "allure-playwright": "^2.15.1",
-    "dotenv": "^16.4.5"
+    "cross-env": "^10.1.0",
+    "dotenv": "^16.4.5",
+    "playwright-bdd": "^9.2.0"
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
 import {
@@ -16,6 +16,7 @@ import {
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Dialog,
   DialogContent,
@@ -411,7 +412,16 @@ export default function AppShell() {
         </header>
 
         <main id="main-content" className="px-4 py-6 sm:px-6">
-          <Outlet />
+          <Suspense
+            fallback={
+              <div aria-label="Loading page" className="space-y-4">
+                <Skeleton className="h-8 w-48" />
+                <Skeleton className="h-32 w-full rounded-xl" />
+              </div>
+            }
+          >
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

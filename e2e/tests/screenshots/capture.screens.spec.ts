@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
-import { test, type Locator, type Page } from '@playwright/test'
+import type { Locator, Page } from '@playwright/test'
+import { test } from '../fixtures/accessGate'
 
 test.skip(!process.env.CAPTURE_SCREENSHOTS, 'set CAPTURE_SCREENSHOTS=1 to capture')
 

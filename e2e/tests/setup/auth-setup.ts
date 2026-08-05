@@ -6,9 +6,9 @@
  * these states via storageState instead of logging in per-test.
  */
 
-import { test as setup, expect } from '@playwright/test'
 import path from 'path'
 import { USERS, ADMIN_STATE, AGENT_STATE } from '../fixtures/auth'
+import { test as setup, expect } from '../fixtures/accessGate'
 
 async function saveSession(
   page: import('@playwright/test').Page,

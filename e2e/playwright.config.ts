@@ -95,6 +95,9 @@ export default defineConfig({
       command: 'npm run dev',
       cwd: path.resolve(__dirname, '../frontend'),
       url: 'http://localhost:5173',
+      env: {
+        VITE_ACCESS_PROJECT_ID: '00000000-0000-4000-8000-000000000000',
+      },
       reuseExistingServer: !process.env.CI,
       stdout: 'pipe',
       stderr: 'pipe',

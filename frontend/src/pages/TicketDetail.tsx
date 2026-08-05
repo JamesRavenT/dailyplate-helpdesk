@@ -339,7 +339,7 @@ export default function TicketDetail() {
                               <ReactMarkdown
                                 components={{
                                   a: ({ children, ...props }) => <a {...props} className="font-medium text-primary underline underline-offset-2">{children}</a>,
-                                  p: ({ children }) => <p className="whitespace-pre-wrap text-body leading-relaxed last:mb-0">{children}</p>,
+                                  p: ({ children }) => <p className="mb-3 whitespace-pre-wrap text-body leading-relaxed last:mb-0">{children}</p>,
                                   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5 text-body">{children}</ul>,
                                   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5 text-body">{children}</ol>,
                                 }}

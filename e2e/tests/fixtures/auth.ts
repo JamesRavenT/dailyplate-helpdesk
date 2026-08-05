@@ -1,5 +1,6 @@
-import { test as base, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import path from 'path'
+import { bypassAccessGate, test as base } from './accessGate'
 
 // Seeded test credentials — created by backend/prisma/seed-test.ts
 export const USERS = {
@@ -29,6 +30,7 @@ type AuthFixtures = {
 export const test = base.extend<AuthFixtures>({
   adminPage: async ({ browser }, use) => {
     const context = await browser.newContext({ storageState: ADMIN_STATE })
+    await bypassAccessGate(context)
     const page = await context.newPage()
     await use(page)
     await context.close()
@@ -36,10 +38,11 @@ export const test = base.extend<AuthFixtures>({
 
   agentPage: async ({ browser }, use) => {
     const context = await browser.newContext({ storageState: AGENT_STATE })
+    await bypassAccessGate(context)
     const page = await context.newPage()
     await use(page)
     await context.close()
   },
 })
 
-export { expect } from '@playwright/test'
+export { expect } from './accessGate'

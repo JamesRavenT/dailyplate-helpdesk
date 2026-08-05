@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from '../fixtures/accessGate'
 
 const deployedBaseUrl = process.env.DEPLOYED_BASE_URL
 

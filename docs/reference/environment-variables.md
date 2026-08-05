@@ -39,10 +39,33 @@ dashboard when you create or sync the Blueprint.
 | `SENTRY_AUTH_TOKEN` | — | Enables Sentry source-map upload during `vite build` (optional). |
 | `SENTRY_ORG` | — | Sentry org (with the auth token). |
 | `SENTRY_PROJECT` | — | Sentry project (with the auth token). |
+| `VITE_ACCESS_PROJECT_ID` | ✅ | Blackbox access-key **project UUID** for the access gate. Public identifier, not a secret — it is inert without a valid key. Validated at startup by [`frontend/src/lib/accessKey.ts`](../../frontend/src/lib/accessKey.ts); a missing or malformed value makes the gate fail closed with a "not configured correctly" message rather than silently rejecting every key. |
 
 > The Cloudflare Worker's `BACKEND_ORIGIN` (the Render backend URL) is configured in
 > [`frontend/wrangler.jsonc`](../../frontend/wrangler.jsonc) as a per-environment Worker
 > variable — **not** in `.env`.
+
+> **`VITE_ACCESS_PROJECT_ID` is inlined by Vite at build time**, so a Worker runtime variable
+> will not work. It must be present in every environment that runs `vite build` — including
+> the Cloudflare deploy environment. `frontend/cf:deploy` runs `vite build && wrangler deploy`,
+> so a local `frontend/.env.local` covers deploys from a workstation, but a CI-driven build
+> needs the variable set in CI.
+
+## Access gate
+
+The SPA is fronted by a client-side access gate ([`frontend/src/components/AccessGate.tsx`](../../frontend/src/components/AccessGate.tsx)).
+It verifies the stored key against the Blackbox verification endpoint on **every page load** —
+a stored key is a convenience, never proof of validity, since the owner may have revoked it.
+In-app route changes read the in-memory outcome and do not re-verify.
+
+The gate is **cosmetic**: it keeps casual visitors out of a public portfolio demo. It is not the
+app's security boundary — all ticket and user data remains behind Better Auth server-side
+sessions, and the SPA bundle is a public static asset either way.
+
+Only an explicit `200 {"valid": false}` deletes the stored key. Every other failure
+(`400`, `405`, `5xx`, malformed body, network error) is treated as *unavailable* — the gate stays
+up with a retry control and the stored key is preserved, so a verifier outage cannot force
+every visitor to request a new key. `429` disables submission for the `Retry-After` duration.
 
 ## E2E (`backend/.env.test.example` / process environment)
 

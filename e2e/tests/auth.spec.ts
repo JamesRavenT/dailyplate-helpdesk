@@ -12,7 +12,10 @@
  */
 
 import { test, expect, USERS } from './fixtures/auth'
-import { test as unauthTest, expect as unauthExpect } from '@playwright/test'
+import {
+  test as unauthTest,
+  expect as unauthExpect,
+} from './fixtures/accessGate'
 
 // ============================================================================
 // Login form

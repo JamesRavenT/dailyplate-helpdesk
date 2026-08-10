@@ -46,7 +46,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
     reason === 'expired'
       ? 'This access key has expired. Please request a new one from the site owner and enter it above.'
       : reason === 'invalid'
-        ? "That key isn't valid for this project."
+        ? "That isn't a valid access key. Please check it and try again."
         : reason === 'unavailable'
           ? "Couldn't verify your key right now. Please try again."
           : reason === 'rate-limited'
@@ -105,7 +105,15 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               </h1>
             </CardTitle>
             <CardDescription>
-              Enter your access key to view this project.
+              Enter your access key to view this project. Don't have one? Request
+              access from{' '}
+              <a
+                href="mailto:jraven.tabag@gmail.com"
+                className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                jraven.tabag@gmail.com
+              </a>
+              .
             </CardDescription>
           </CardHeader>
           <CardContent>

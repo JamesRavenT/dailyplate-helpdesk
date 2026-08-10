@@ -107,7 +107,17 @@ describe('access-key utility', () => {
       })
     })
 
-    it.each([400, 405, 500, 503])(
+    it('maps status 400 to invalid without logging an error', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      stubResponse(400)
+
+      await expect(verifyAccessKey('KEY')).resolves.toEqual({
+        status: 'invalid',
+      })
+      expect(errorSpy).not.toHaveBeenCalled()
+    })
+
+    it.each([405, 500, 503])(
       'maps status %s to unavailable',
       async status => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined)

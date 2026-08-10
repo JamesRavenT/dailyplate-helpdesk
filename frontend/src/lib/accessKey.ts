@@ -107,7 +107,11 @@ export async function verifyAccessKey(key: string): Promise<VerifyResult> {
     }
   }
 
-  if (response.status === 400 || response.status === 405) {
+  if (response.status === 400) {
+    return { status: 'invalid' }
+  }
+
+  if (response.status === 405) {
     console.error('Access-key verifier client/protocol error')
     return { status: 'unavailable' }
   }

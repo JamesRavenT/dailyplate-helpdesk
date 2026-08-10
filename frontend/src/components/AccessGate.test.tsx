@@ -63,6 +63,9 @@ describe('AccessGate', () => {
 
     expect(screen.getByRole('heading', { name: 'Access required' })).toBeInTheDocument()
     expect(screen.getByLabelText('Access key')).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'jraven.tabag@gmail.com' }),
+    ).toHaveAttribute('href', 'mailto:jraven.tabag@gmail.com')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
@@ -81,7 +84,7 @@ describe('AccessGate', () => {
     renderAccessGate({ reason: 'invalid' })
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      "That key isn't valid for this project.",
+      "That isn't a valid access key. Please check it and try again.",
     )
   })
 

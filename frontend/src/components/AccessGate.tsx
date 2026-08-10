@@ -23,7 +23,6 @@ export default function AccessGate({ children }: { children: ReactNode }) {
     retryAfterSeconds,
     isVerifying,
     submitKey,
-    retry,
   } = useAccessGate()
   const [value, setValue] = useState('')
 
@@ -45,7 +44,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
 
   const errorMessage =
     reason === 'expired'
-      ? 'This access key has expired. Please request a new one from the site owner and enter it below.'
+      ? 'This access key has expired. Please request a new one from the site owner and enter it above.'
       : reason === 'invalid'
         ? "That key isn't valid for this project."
         : reason === 'unavailable'
@@ -142,18 +141,6 @@ export default function AccessGate({ children }: { children: ReactNode }) {
                 </div>
               )}
 
-              {reason === 'unavailable' && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  disabled={isVerifying}
-                  onClick={retry}
-                >
-                  Try again
-                </Button>
-              )}
-
               <Button
                 type="submit"
                 className="w-full"
@@ -161,7 +148,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
                 disabled={submitDisabled}
                 loading={isVerifying}
               >
-                {isVerifying ? 'Checking…' : 'Unlock'}
+                {isVerifying ? 'Checking…' : errorMessage ? 'Try again' : 'Unlock'}
               </Button>
             </form>
 

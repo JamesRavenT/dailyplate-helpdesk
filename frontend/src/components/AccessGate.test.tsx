@@ -72,7 +72,7 @@ describe('AccessGate', () => {
 
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent(
-      'This access key has expired. Please request a new one from the site owner and enter it below.',
+      'This access key has expired. Please request a new one from the site owner and enter it above.',
     )
     expect(alert).not.toHaveTextContent("isn't valid")
   })
@@ -92,8 +92,9 @@ describe('AccessGate', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       "Couldn't verify your key right now. Please try again.",
     )
+    await user.type(screen.getByLabelText('Access key'), 'KEY')
     await user.click(screen.getByRole('button', { name: 'Try again' }))
-    expect(retry).toHaveBeenCalledOnce()
+    expect(submitKey).toHaveBeenCalledWith('KEY')
   })
 
   it('shows a live rate-limit value and disables submission', async () => {
@@ -104,7 +105,7 @@ describe('AccessGate', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Too many attempts. Please try again in 30s.',
     )
-    expect(screen.getByRole('button', { name: 'Unlock' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled()
   })
 
   it('shows a configuration error and disables submission', async () => {
@@ -115,7 +116,7 @@ describe('AccessGate', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       "The access gate isn't configured correctly. Please contact the site owner.",
     )
-    expect(screen.getByRole('button', { name: 'Unlock' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeDisabled()
   })
 
   it('submits the raw typed key for provider normalization', async () => {

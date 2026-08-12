@@ -47,7 +47,7 @@ jobs:
       SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
       SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Without a target URL there is nothing to verify. Skip loudly rather than
       # passing green on four vacuously skipped tests.
@@ -99,7 +99,7 @@ jobs:
             ln -sf "$(command -v bun)" "$HOME/.bun/bin/bun"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.target.outputs.configured == 'true'
         with:
           node-version: 22
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload Playwright report
         if: ${{ steps.target.outputs.configured == 'true' && !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deploy-smoke-report
           path: |

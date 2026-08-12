@@ -10,6 +10,7 @@
 import 'dotenv/config'
 import { PgBoss } from 'pg-boss'
 import { prisma } from '../src/lib/prisma.ts'
+import { createPgBossConfig } from '../src/lib/pgboss-config.ts'
 
 const PROCESS_QUEUE = 'process-ticket'
 
@@ -178,7 +179,7 @@ const tickets = [
 ]
 
 async function main() {
-  const boss = new PgBoss(process.env.DATABASE_URL!)
+  const boss = new PgBoss(createPgBossConfig())
   await boss.start()
 
   console.log(`Adding ${tickets.length} new OPEN tickets…\n`)

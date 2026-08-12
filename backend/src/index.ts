@@ -10,7 +10,7 @@ import { router } from './routes/index.ts'
 import { internalRouter } from './routes/internal.ts'
 import { errorHandler } from './middleware/errorHandler.ts'
 import { requireInternalToken } from './middleware/internal.ts'
-import { startBoss } from './lib/triage.ts'
+import { getBossStatus, startBoss } from './lib/triage.ts'
 
 const app = express()
 const port = process.env.PORT ?? 3001
@@ -67,7 +67,25 @@ app.use(express.json({ limit: '100kb' }))
 app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+  const timestamp = new Date().toISOString()
+  const bossStatus = getBossStatus()
+  const worker = {
+    status: bossStatus.status,
+    lastFetchAt: bossStatus.lastFetchAt,
+    lastSweepAt: bossStatus.lastSweepAt,
+    ...(bossStatus.reason && { reason: bossStatus.reason }),
+  }
+
+  if (bossStatus.status === 'unhealthy') {
+    return res.status(503).json({
+      status: 'unhealthy',
+      timestamp,
+      reason: bossStatus.reason,
+      worker,
+    })
+  }
+
+  return res.json({ status: 'ok', timestamp, worker })
 })
 
 app.use('/api', router)
@@ -77,7 +95,21 @@ Sentry.setupExpressErrorHandler(app)
 
 app.use(errorHandler)
 
-app.listen(port, () => {
-  console.log(`Backend running on http://localhost:${port}`)
-  startBoss().catch((err) => console.error('[boss] startup failed:', err))
-})
+async function start() {
+  try {
+    await startBoss()
+    app.listen(port, () => {
+      console.log(`Backend running on http://localhost:${port}`)
+    })
+  } catch (error) {
+    console.error('[boss] startup failed:', error)
+    Sentry.captureException(error)
+    try {
+      await Sentry.flush(2_000)
+    } finally {
+      process.exit(1)
+    }
+  }
+}
+
+void start()

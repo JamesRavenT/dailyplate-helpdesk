@@ -12,6 +12,7 @@ export async function processTicketWithOpenAi(
 ): Promise<ProcessResult> {
   const { object } = await generateObject({
     model: openai('gpt-4.1-nano'),
+    abortSignal: AbortSignal.timeout(60_000),
     schema: processSchema,
     system: `You are an AI support agent for DailyPlate. For each incoming ticket you must:
 

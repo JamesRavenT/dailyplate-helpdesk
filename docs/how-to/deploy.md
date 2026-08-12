@@ -278,6 +278,18 @@ gh workflow run "Promote develop to main"
 > up. It reports the running commit via Render's `RENDER_GIT_COMMIT`, which is what lets the
 > workflow tell a finished deploy from the previous revision still answering.
 
+### How Workers Builds behaves per branch
+
+The production Worker is git-connected and builds **every** branch, not just `main`. For `main` it
+runs `npx wrangler deploy` — a real production release. For any other branch it runs
+`npx wrangler versions upload`, which uploads an inactive version and does **not** route traffic
+to it. So a push to `develop` producing a `Workers Builds: helpdesk-web` check is expected and
+harmless; it is a preview upload, not a deploy.
+
+The staging Worker is connected separately, on `develop`, with `npx wrangler deploy --env staging`.
+That `--env staging` is load-bearing: without it wrangler resolves the top-level config, which is
+the production Worker.
+
 ### Known gap: the frontend deploy is not commit-verified
 
 `/health` reports the **backend** commit. The Cloudflare Worker exposes no equivalent, so a

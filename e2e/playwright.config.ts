@@ -4,6 +4,7 @@ import path from 'path'
 import { ADMIN_STATE } from './tests/fixtures/auth'
 
 const runRealOpenAi = process.env.RUN_REAL_OPENAI === '1'
+const smokeOnly = process.env.SMOKE_ONLY === '1'
 const bddTestDir = defineBddConfig({
   features: '../docs/reference/features/**/*.feature',
   featuresRoot: '../docs/reference/features',
@@ -15,6 +16,10 @@ const bddTestDir = defineBddConfig({
 
 if (runRealOpenAi && !process.env.OPENAI_API_KEY) {
   throw new Error('RUN_REAL_OPENAI=1 requires OPENAI_API_KEY (this opt-in project incurs API cost)')
+}
+
+if (smokeOnly && !process.env.DEPLOYED_BASE_URL) {
+  throw new Error('SMOKE_ONLY=1 runs against a deployed site and requires DEPLOYED_BASE_URL')
 }
 
 export default defineConfig({
@@ -73,7 +78,9 @@ export default defineConfig({
       },
     },
   ],
-  webServer: [
+  // Top-level webServer applies to every project, so smoke-only runs against a
+  // deployed target must not boot local servers they never talk to.
+  webServer: smokeOnly ? [] : [
     {
       command: 'bun run --env-file=.env.test.example src/index.ts',
       cwd: path.resolve(__dirname, '../backend'),

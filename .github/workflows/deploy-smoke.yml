@@ -25,24 +25,12 @@ jobs:
     name: Smoke test the deployment
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    # The deploy-smoke project has no webServer of its own, but playwright.config.ts
-    # declares its dev servers globally, so they boot for any run — the backend needs
-    # a database on 5434 to come up. See the note at the end of this file.
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: helpdesk
-          POSTGRES_PASSWORD: helpdesk
-          POSTGRES_DB: helpdesk_test
-        ports:
-          - 5434:5432
-        options: >-
-          --health-cmd "pg_isready -U helpdesk"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
+      # Every test here targets the deployed site, so SMOKE_ONLY tells the Playwright
+      # config to skip its local dev servers. Without it this job would need a Postgres
+      # service and the backend and frontend installs just to boot servers it never
+      # talks to.
+      SMOKE_ONLY: '1'
       DEPLOYED_BASE_URL: ${{ inputs.base_url || vars.DEPLOYED_BASE_URL || secrets.DEPLOYED_BASE_URL }}
       SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
       SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
@@ -86,44 +74,12 @@ jobs:
           echo "::error::$DEPLOYED_BASE_URL/health did not return 200 within 15 minutes."
           exit 1
 
-      - uses: oven-sh/setup-bun@v2
-        if: steps.target.outputs.configured == 'true'
-        with:
-          bun-version: 1.3.14
-
-      - name: Link bun into ~/.bun/bin
-        if: steps.target.outputs.configured == 'true'
-        run: |
-          mkdir -p "$HOME/.bun/bin"
-          if [ ! -x "$HOME/.bun/bin/bun" ]; then
-            ln -sf "$(command -v bun)" "$HOME/.bun/bin/bun"
-          fi
-
       - uses: actions/setup-node@v7
         if: steps.target.outputs.configured == 'true'
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            frontend/package-lock.json
-            e2e/package-lock.json
-
-      - name: Install backend dependencies
-        if: steps.target.outputs.configured == 'true'
-        working-directory: backend
-        run: bun install --frozen-lockfile
-
-      - name: Generate Prisma client
-        if: steps.target.outputs.configured == 'true'
-        working-directory: backend
-        run: bun run prisma:generate
-        env:
-          DATABASE_URL: postgresql://helpdesk:helpdesk@localhost:5434/helpdesk_test
-
-      - name: Install frontend dependencies
-        if: steps.target.outputs.configured == 'true'
-        working-directory: frontend
-        run: npm ci
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Install e2e dependencies
         if: steps.target.outputs.configured == 'true'
@@ -155,9 +111,3 @@ jobs:
             e2e/test-results
           retention-days: 14
           if-no-files-found: ignore
-
-# Note: the local dev servers this job boots are pure overhead — every smoke test
-# targets DEPLOYED_BASE_URL. They exist only because playwright.config.ts declares
-# `webServer` at the top level, where it applies to every project. Making that array
-# conditional (skipping it when only the deploy-smoke project runs) would let this
-# job drop the postgres service and the backend/frontend installs entirely.

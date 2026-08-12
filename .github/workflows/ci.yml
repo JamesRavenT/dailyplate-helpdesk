@@ -1,0 +1,229 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch supersedes an in-flight run; main is never cancelled
+# so every commit that reaches production keeps a complete result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.3.14
+  NODE_VERSION: 22
+
+jobs:
+  backend:
+    name: Backend — unit tests and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        working-directory: backend
+        run: bun install --frozen-lockfile
+
+      # No postinstall hook generates the client, and both the tests and tsc need its
+      # types. generate never connects, so the URL only has to parse.
+      - name: Generate Prisma client
+        working-directory: backend
+        run: bun run prisma:generate
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - name: Unit tests
+        working-directory: backend
+        run: bun test
+
+      - name: Typecheck
+        working-directory: backend
+        run: bunx tsc --noEmit
+
+  frontend:
+    name: Frontend — component tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Component tests
+        working-directory: frontend
+        run: npm run test:component
+
+      # SENTRY_AUTH_TOKEN is deliberately absent: the Sentry plugin and source-map
+      # upload only engage on a real release build.
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+  migrations:
+    name: Migrations — apply to an empty database and check for drift
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: helpdesk
+          POSTGRES_PASSWORD: helpdesk
+          POSTGRES_DB: helpdesk_ci
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U helpdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://helpdesk:helpdesk@localhost:5434/helpdesk_ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        working-directory: backend
+        run: bun install --frozen-lockfile
+
+      - name: Apply migrations
+        working-directory: backend
+        run: bun run prisma:deploy
+
+      # The migration history must reproduce schema.prisma exactly. A non-empty diff
+      # (exit code 2) means someone edited the schema without generating a migration.
+      - name: Check for schema drift
+        working-directory: backend
+        run: |
+          set +e
+          bun run prisma migrate diff \
+            --from-config-datasource \
+            --to-schema prisma/schema.prisma \
+            --exit-code
+          case $? in
+            0) echo "No drift — migrations match schema.prisma." ;;
+            2) echo "::error::schema.prisma has changes with no matching migration. Run 'bun run prisma:migrate' and commit the result."; exit 1 ;;
+            *) echo "::error::prisma migrate diff failed."; exit 1 ;;
+          esac
+
+  e2e:
+    name: E2E — Playwright against a real backend
+    # Slow (browser download, two dev servers, a real database), so it gates main
+    # rather than every PR. Add the 'run-e2e' label to force it on a pull request.
+    if: >-
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.labels.*.name, 'run-e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: helpdesk
+          POSTGRES_PASSWORD: helpdesk
+          POSTGRES_DB: helpdesk_test
+        # Must be 5434 — backend/.env.test.example, which both global-setup and the
+        # backend webServer read, points there.
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U helpdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      # e2e/global-setup.ts resolves bun from a fixed path rather than PATH, because
+      # it is not on PATH in every shell context. Make that path valid here.
+      - name: Link bun into ~/.bun/bin
+        run: |
+          mkdir -p "$HOME/.bun/bin"
+          if [ ! -x "$HOME/.bun/bin/bun" ]; then
+            ln -sf "$(command -v bun)" "$HOME/.bun/bin/bun"
+          fi
+          "$HOME/.bun/bin/bun" --version
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: bun run prisma:generate
+        env:
+          DATABASE_URL: postgresql://helpdesk:helpdesk@localhost:5434/helpdesk_test
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # global-setup pushes the schema and seeds the test users; the config starts the
+      # backend and frontend itself. Generating the BDD specs first lets both suites
+      # share one pair of dev servers.
+      - name: Run Playwright suites
+        working-directory: e2e
+        run: |
+          npm run bddgen
+          npx playwright test --project=chromium --project=bdd
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Allure results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: e2e/allure-results
+          retention-days: 14
+          if-no-files-found: ignore

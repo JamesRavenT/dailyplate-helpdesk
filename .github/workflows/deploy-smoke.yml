@@ -1,0 +1,163 @@
+name: Deploy smoke
+
+# Cloudflare Workers Builds (frontend) and Render (backend) own the deploys; this
+# workflow only verifies the result. It waits for the deployed backend to answer
+# /health, then runs the deploy-smoke Playwright project against the live site.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Override the URL to smoke test
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke test the deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    # The deploy-smoke project has no webServer of its own, but playwright.config.ts
+    # declares its dev servers globally, so they boot for any run — the backend needs
+    # a database on 5434 to come up. See the note at the end of this file.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: helpdesk
+          POSTGRES_PASSWORD: helpdesk
+          POSTGRES_DB: helpdesk_test
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U helpdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DEPLOYED_BASE_URL: ${{ inputs.base_url || vars.DEPLOYED_BASE_URL || secrets.DEPLOYED_BASE_URL }}
+      SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
+      SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Without a target URL there is nothing to verify. Skip loudly rather than
+      # passing green on four vacuously skipped tests.
+      - name: Check the target is configured
+        id: target
+        run: |
+          if [ -z "$DEPLOYED_BASE_URL" ]; then
+            echo "::warning::DEPLOYED_BASE_URL is not set — skipping the deploy smoke test. Set it as a repository variable to enable this workflow."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Render's free plan rebuilds the container and cold-starts it, so the previous
+      # revision can keep answering for a while. /health also returns 503 whenever the
+      # pg-boss worker is unhealthy, so only a 200 counts as ready.
+      - name: Wait for the deployment to become healthy
+        if: steps.target.outputs.configured == 'true'
+        run: |
+          deadline=$(( $(date +%s) + 900 ))
+          attempt=0
+          until [ "$(date +%s)" -ge "$deadline" ]; do
+            attempt=$(( attempt + 1 ))
+            status=$(curl -sS -o /tmp/health.json -w '%{http_code}' \
+              -H 'Cache-Control: no-cache' \
+              "$DEPLOYED_BASE_URL/health?ci=$(date +%s)" || echo 000)
+            if [ "$status" = "200" ]; then
+              echo "Healthy after $attempt attempt(s):"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "Attempt $attempt: HTTP $status"
+            [ -s /tmp/health.json ] && cat /tmp/health.json
+            sleep 15
+          done
+          echo "::error::$DEPLOYED_BASE_URL/health did not return 200 within 15 minutes."
+          exit 1
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.target.outputs.configured == 'true'
+        with:
+          bun-version: 1.3.14
+
+      - name: Link bun into ~/.bun/bin
+        if: steps.target.outputs.configured == 'true'
+        run: |
+          mkdir -p "$HOME/.bun/bin"
+          if [ ! -x "$HOME/.bun/bin/bun" ]; then
+            ln -sf "$(command -v bun)" "$HOME/.bun/bin/bun"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.target.outputs.configured == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install backend dependencies
+        if: steps.target.outputs.configured == 'true'
+        working-directory: backend
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma client
+        if: steps.target.outputs.configured == 'true'
+        working-directory: backend
+        run: bun run prisma:generate
+        env:
+          DATABASE_URL: postgresql://helpdesk:helpdesk@localhost:5434/helpdesk_test
+
+      - name: Install frontend dependencies
+        if: steps.target.outputs.configured == 'true'
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install e2e dependencies
+        if: steps.target.outputs.configured == 'true'
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Playwright browser
+        if: steps.target.outputs.configured == 'true'
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # The access gate is bypassed inside the fixture, which intercepts the verifier
+      # call — no access key is needed here. Without smoke admin credentials the
+      # session test skips itself and the rest still run.
+      - name: Run the deploy smoke suite
+        if: steps.target.outputs.configured == 'true'
+        working-directory: e2e
+        run: npx playwright test --project=deploy-smoke
+        env:
+          CI: 'true'
+
+      - name: Upload Playwright report
+        if: ${{ steps.target.outputs.configured == 'true' && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-smoke-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14
+          if-no-files-found: ignore
+
+# Note: the local dev servers this job boots are pure overhead — every smoke test
+# targets DEPLOYED_BASE_URL. They exist only because playwright.config.ts declares
+# `webServer` at the top level, where it applies to every project. Making that array
+# conditional (skipping it when only the deploy-smoke project runs) would let this
+# job drop the postgres service and the backend/frontend installs entirely.

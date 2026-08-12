@@ -3,7 +3,9 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # develop is the integration line that feeds staging; main is the release line
+    # that feeds production. Both must be gated.
+    branches: [main, develop]
 
 # A newer push to the same branch supersedes an in-flight run; main is never cancelled
 # so every commit that reaches production keeps a complete result.
@@ -127,8 +129,9 @@ jobs:
 
   e2e:
     name: E2E — Playwright against a real backend
-    # Slow (browser download, two dev servers, a real database), so it gates main
-    # rather than every PR. Add the 'run-e2e' label to force it on a pull request.
+    # Slow (browser download, two dev servers, a real database), so it gates the
+    # integration and release branches rather than every PR. Add the 'run-e2e'
+    # label to force it on a pull request.
     if: >-
       github.event_name == 'push' ||
       contains(github.event.pull_request.labels.*.name, 'run-e2e')

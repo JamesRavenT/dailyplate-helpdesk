@@ -1,0 +1,102 @@
+name: Promote develop to main
+
+# The release gate. Cloudflare and Render deploy main to production automatically,
+# so fast-forwarding main IS the production release — this workflow is the decision,
+# not the deploy.
+#
+# It refuses to promote a commit that has not already been built on staging and
+# verified there, which is the whole point of having a staging environment: a
+# replica that auto-deploys alongside production proves nothing, but one that a
+# commit must pass through first is a gate.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    name: Promote the verified develop commit to main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Full history: a fast-forward check needs the commits on both branches.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: develop
+
+      - name: Resolve the candidate commit
+        id: candidate
+        run: |
+          sha=$(git rev-parse origin/develop)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Candidate: $sha"
+          git log -1 --format='%s' "$sha"
+
+      - name: Confirm main can fast-forward to it
+        env:
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          if git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::notice::main already contains $SHA — nothing to promote."
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor origin/main "$SHA"; then
+            echo "::error::main has commits that develop does not, so this cannot be a fast-forward. Merge main into develop first, let staging re-verify, then promote."
+            exit 1
+          fi
+          echo "Fast-forward is clean."
+
+      # The gate. Both must have succeeded for this exact commit on develop:
+      # CI (tests, build, migration drift) and Deploy smoke (staging verified the
+      # deployed artifact). Checking the SHA rather than "the latest run" is what
+      # stops a green run for an older commit from authorising this one.
+      - name: Require CI and staging smoke to have passed for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          failed=0
+          for wf in "CI" "Deploy smoke"; do
+            conclusion=$(gh run list \
+              --workflow "$wf" \
+              --branch develop \
+              --limit 50 \
+              --json headSha,conclusion,status,url \
+              --jq "[.[] | select(.headSha == \"$SHA\")] | first" )
+
+            if [ -z "$conclusion" ] || [ "$conclusion" = "null" ]; then
+              echo "::error::No '$wf' run found for $SHA on develop. Push the commit and let it run before promoting."
+              failed=1
+              continue
+            fi
+
+            result=$(echo "$conclusion" | jq -r '.conclusion')
+            url=$(echo "$conclusion" | jq -r '.url')
+            if [ "$result" != "success" ]; then
+              echo "::error::'$wf' concluded '$result' for $SHA — $url"
+              failed=1
+            else
+              echo "'$wf' passed for $SHA — $url"
+            fi
+          done
+          [ "$failed" -eq 0 ] || exit 1
+
+      - name: Fast-forward main
+        env:
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          if git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "Already promoted; nothing to push."
+            exit 0
+          fi
+          # Pushing a SHA to main is the release. Non-forced, so the server rejects
+          # anything that is not a fast-forward even if the check above were wrong.
+          git push origin "$SHA:refs/heads/main"
+          echo "::notice::Promoted $SHA to main. Cloudflare and Render will deploy it; the production canary runs once they do."

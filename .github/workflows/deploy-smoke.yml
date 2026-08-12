@@ -1,11 +1,17 @@
 name: Deploy smoke
 
 # Cloudflare Workers Builds (frontend) and Render (backend) own the deploys; this
-# workflow only verifies the result. It waits for the deployed backend to answer
-# /health, then runs the deploy-smoke Playwright project against the live site.
+# workflow only verifies the result. It waits for the deployed backend to report the
+# triggering commit, then runs the deploy-smoke Playwright project against it.
+#
+# Two targets, deliberately asymmetric:
+#   develop -> staging     full suite, including the authenticated sign-in test
+#   main    -> production  read-only canary; no credentials are supplied, so the
+#                          sign-in test skips itself and CI never authenticates
+#                          against the live system
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
     inputs:
       base_url:
@@ -14,7 +20,7 @@ on:
         type: string
 
 concurrency:
-  group: deploy-smoke
+  group: deploy-smoke-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -22,7 +28,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Smoke test the deployment
+    name: ${{ github.ref == 'refs/heads/develop' && 'Smoke test staging' || 'Canary check production' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -31,9 +37,15 @@ jobs:
       # service and the backend and frontend installs just to boot servers it never
       # talks to.
       SMOKE_ONLY: '1'
-      DEPLOYED_BASE_URL: ${{ inputs.base_url || vars.DEPLOYED_BASE_URL || secrets.DEPLOYED_BASE_URL }}
-      SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
-      SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
+      DEPLOYED_BASE_URL: >-
+        ${{ inputs.base_url
+            || (github.ref == 'refs/heads/develop' && vars.STAGING_BASE_URL)
+            || vars.PRODUCTION_BASE_URL }}
+      # Credentials are supplied for staging only. Against production these resolve
+      # to empty, the sign-in test skips itself, and the canary stays read-only —
+      # so no admin credential for the live system ever has to exist in CI.
+      SMOKE_ADMIN_EMAIL: ${{ github.ref == 'refs/heads/develop' && secrets.SMOKE_ADMIN_EMAIL || '' }}
+      SMOKE_ADMIN_PASSWORD: ${{ github.ref == 'refs/heads/develop' && secrets.SMOKE_ADMIN_PASSWORD || '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -43,9 +55,10 @@ jobs:
         id: target
         run: |
           if [ -z "$DEPLOYED_BASE_URL" ]; then
-            echo "::warning::DEPLOYED_BASE_URL is not set — skipping the deploy smoke test. Set it as a repository variable to enable this workflow."
+            echo "::warning::No target URL for ${{ github.ref_name }} — skipping. Set the STAGING_BASE_URL and PRODUCTION_BASE_URL repository variables to enable this workflow."
             echo "configured=false" >> "$GITHUB_OUTPUT"
           else
+            echo "Target: $DEPLOYED_BASE_URL"
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 

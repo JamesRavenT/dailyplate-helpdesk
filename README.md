@@ -161,6 +161,7 @@ discussion, including why the inbound pipeline is split between n8n and the Rend
 | **Monitoring** | Sentry (`@sentry/node`, `@sentry/react`) |
 | **Testing** | Bun (backend units), Vitest + React Testing Library (component), Playwright + Allure (E2E), playwright-bdd (Gherkin) |
 | **Hosting** | Cloudflare Workers (SPA + API proxy), Render (backend, Docker), Neon (database), n8n on a GCP VM |
+| **CI/CD** | GitHub Actions — PR gates, commit-aware deploy verification, staging promotion gate, branch protection |
 
 ---
 
@@ -295,7 +296,7 @@ Log in at `/login` with your `SEED_ADMIN_*` credentials.
 ## Testing
 
 ```bash
-# Backend unit tests (bun) — 36 tests
+# Backend unit tests (bun) — 56 tests
 cd backend && bun test
 
 # Component tests (Vitest + React Testing Library) — 186 tests
@@ -341,19 +342,35 @@ Production runs across three managed services plus one self-hosted automation no
 Full step-by-step instructions, the environment-variable reference, and the n8n workflow setup
 are in **[docs/how-to/deploy.md](./docs/how-to/deploy.md)**.
 
-### CI/CD
+### Environments and CI/CD
 
-Cloudflare and Render each build from `main` on their own, so GitHub Actions tests and verifies
-rather than deploys:
+Two deployed environments, fed by two branches:
 
-- **`ci.yml`** — every pull request runs the backend unit tests and typecheck, the component
-  tests and production build, and a migration drift check that fails if `schema.prisma` was
-  changed without a matching migration. The full Playwright suite runs on pushes to `main`, or on
-  a PR labelled `run-e2e`.
-- **`deploy-smoke.yml`** — after a push to `main`, waits for the deployed `/health` to return
-  `200`, then runs the smoke project against the live site: `/health` serves JSON rather than the
-  SPA, sign-in sets a first-party cookie, redirects never leak the Render origin, and deep links
-  resolve through the SPA fallback.
+| Branch | Environment | Database |
+|---|---|---|
+| `develop` | staging — `staging.dailyplate.help` | its own Neon project |
+| `main` | production — `dailyplate.help` | Neon production |
+
+Cloudflare and Render build each branch themselves, so GitHub Actions tests, verifies, and decides
+what may be released — it never deploys:
+
+- **`ci.yml`** — every pull request runs the backend unit tests and typecheck, the component tests
+  and production build, and a migration drift check that fails if `schema.prisma` changed without a
+  matching migration. The full Playwright suite gates `develop` and `main`, or any PR labelled
+  `run-e2e`.
+- **`deploy-smoke.yml`** — waits for the deployed `/health` to report the **triggering commit**,
+  not merely a `200`, then runs the smoke project. Targets are asymmetric by design: `develop`
+  verifies staging with the full suite *including an authenticated sign-in*, while `main` runs a
+  **read-only canary** with no credentials supplied — so no admin credential for the live system
+  exists in CI.
+- **`promote.yml`** — the release gate. It refuses to fast-forward `main` unless CI, the staging
+  smoke suite, and the staging frontend build all concluded successfully **for that exact commit**.
+  Branch protection requires the same checks, so the rule holds even without the workflow.
+
+Staging deliberately carries **no third-party credentials**: `ALLOW_STUB_AI` selects a
+deterministic AI stub and `EMAIL_DELIVERY_ENABLED=false` disables outbound mail, while
+`NODE_ENV=production` keeps every security guard active. Nothing in staging can spend money or
+email a real person, and the inbound email pipeline (Resend → n8n) points only at production.
 
 ---
 
@@ -430,6 +447,12 @@ Captured from the running app against seeded demo data (see [`docs/assets/`](./d
   never performs account actions, so some answerable-but-account-specific tickets still go to a
   human.
 - **English-only** classification and replies; no multi-language handling.
+- **Staging has no email pipeline.** Resend inbound and the n8n gateway point only at production,
+  so the inbound email hop is rehearsed by the E2E suite against the real webhook rather than on
+  staging. Duplicating it would need a second inbound address and a second n8n workflow.
+- **Frontend deploys are build-verified, not commit-verified.** `/health` reports the running
+  backend commit, but the Worker exposes no equivalent, so the smoke suite proves the frontend
+  *built* for a commit rather than that the edge is serving it.
 
 ---
 

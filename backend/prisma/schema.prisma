@@ -144,12 +144,13 @@ model Ticket {
 }
 
 model Message {
-  id          String     @id @default(cuid())
-  ticket_id   String
-  ticket      Ticket     @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
-  body        String
-  sender_type SenderType
-  sent_at     DateTime   @default(now())
+  id                String     @id @default(cuid())
+  ticket_id         String
+  ticket            Ticket     @relation(fields: [ticket_id], references: [id], onDelete: Cascade)
+  body              String
+  sender_type       SenderType
+  sent_at           DateTime   @default(now())
+  inbound_source_id String?    @unique
 }
 
 model Article {

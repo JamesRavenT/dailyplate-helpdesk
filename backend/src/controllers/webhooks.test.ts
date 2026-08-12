@@ -1,5 +1,29 @@
 import { describe, expect, test } from 'bun:test'
-import { stripEmailQuotes, stripHtml } from './webhooks.ts'
+import {
+  createLegacyInboundSourceId,
+  createResendInboundSourceId,
+  stripEmailQuotes,
+  stripHtml,
+} from './webhooks.ts'
+
+describe('inbound source IDs', () => {
+  test('normalizes a legacy Message-ID', () => {
+    expect(createLegacyInboundSourceId('  <Message-123@Example.COM>  ')).toBe(
+      'message:message-123@example.com',
+    )
+  })
+
+  test('leaves legacy delivery non-idempotent without a Message-ID', () => {
+    expect(createLegacyInboundSourceId()).toBeUndefined()
+    expect(createLegacyInboundSourceId('   ')).toBeUndefined()
+  })
+
+  test('uses the stable Resend email ID', () => {
+    expect(createResendInboundSourceId('4f88f665-4445-4d2d-a62a-720e78d54a4d')).toBe(
+      'resend:4f88f665-4445-4d2d-a62a-720e78d54a4d',
+    )
+  })
+})
 
 describe('stripEmailQuotes', () => {
   test('removes a wrapped Gmail attribution and quoted reply', () => {

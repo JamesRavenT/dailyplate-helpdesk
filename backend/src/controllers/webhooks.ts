@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'crypto'
 import type { Request, Response, NextFunction } from 'express'
+import { fromPrisma } from 'pg-boss'
 import { z } from 'zod'
 import { prisma } from '../lib/prisma.ts'
 import { getResendClient } from '../lib/resend.ts'
@@ -49,6 +50,49 @@ export function stripEmailQuotes(raw: string): string {
   return result.join('\n').trim()
 }
 
+export function createLegacyInboundSourceId(messageId?: string): string | undefined {
+  const normalized = messageId?.trim().replace(/^<|>$/g, '').trim().toLowerCase()
+  return normalized ? `message:${normalized}` : undefined
+}
+
+export function createResendInboundSourceId(emailId: string): string {
+  return `resend:${emailId}`
+}
+
+type InboundResult = { ticket_id: string; action: 'ticket_created' | 'message_added' }
+
+async function findExistingInboundResult(inboundSourceId: string): Promise<InboundResult | null> {
+  const existingMessage = await prisma.message.findUnique({
+    where: { inbound_source_id: inboundSourceId },
+    select: {
+      id: true,
+      ticket: {
+        select: {
+          id: true,
+          messages: {
+            where: { sender_type: 'CUSTOMER' },
+            orderBy: [{ sent_at: 'asc' }, { id: 'asc' }],
+            take: 1,
+            select: { id: true },
+          },
+        },
+      },
+    },
+  })
+  if (!existingMessage) return null
+
+  return {
+    ticket_id: existingMessage.ticket.id,
+    action: existingMessage.ticket.messages[0]?.id === existingMessage.id
+      ? 'ticket_created'
+      : 'message_added',
+  }
+}
+
+function isUniqueConstraintViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002'
+}
+
 async function processInboundEmail(params: {
   from_email: string
   from_name?: string
@@ -57,69 +101,105 @@ async function processInboundEmail(params: {
   message_id?: string
   in_reply_to?: string
   references?: string
-}): Promise<{ ticket_id: string; action: 'ticket_created' | 'message_added' }> {
-  const { from_email, from_name, subject, message_id, in_reply_to, references } = params
+  inbound_source_id?: string
+}): Promise<InboundResult> {
+  const {
+    from_email,
+    from_name,
+    subject,
+    message_id,
+    in_reply_to,
+    references,
+    inbound_source_id,
+  } = params
   const body = stripEmailQuotes(params.body) || params.body.trim()
   const now = new Date()
 
-  const threadCandidates = extractMessageIds(in_reply_to, references)
-  if (threadCandidates.length > 0) {
-    const existing = await prisma.ticket.findFirst({
-      where: { email_thread_id: { in: threadCandidates } },
-      orderBy: { created_at: 'desc' },
-    })
-    if (existing) {
-      if (!body) {
-        return { ticket_id: existing.id, action: 'message_added' }
-      }
-
-      const wasAiResolved = existing.status === 'AI_RESOLVED'
-      const shouldReopen = ['AI_RESOLVED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(existing.status)
-      await prisma.$transaction([
-        prisma.message.create({
-          data: { ticket_id: existing.id, body, sender_type: 'CUSTOMER', sent_at: now },
-        }),
-        prisma.ticket.update({
-          where: { id: existing.id },
-          data: {
-            last_customer_reply_at: now,
-            last_updated_at: now,
-            summary: null,
-            ...(shouldReopen && { status: 'OPEN' }),
-            ...(wasAiResolved && { assigned_to_id: null, is_ai_handled: false }),
-          },
-        }),
-      ])
-      return { ticket_id: existing.id, action: 'message_added' }
-    }
+  if (inbound_source_id) {
+    const existingResult = await findExistingInboundResult(inbound_source_id)
+    if (existingResult) return existingResult
   }
 
-  const ticket = await prisma.$transaction(async (tx) => {
-    const t = await tx.ticket.create({
-      data: {
+  try {
+    const threadCandidates = extractMessageIds(in_reply_to, references)
+    if (threadCandidates.length > 0) {
+      const existing = await prisma.ticket.findFirst({
+        where: { email_thread_id: { in: threadCandidates } },
+        orderBy: { created_at: 'desc' },
+      })
+      if (existing) {
+        if (!body) {
+          return { ticket_id: existing.id, action: 'message_added' }
+        }
+
+        const wasAiResolved = existing.status === 'AI_RESOLVED'
+        const shouldReopen = ['AI_RESOLVED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].includes(existing.status)
+        await prisma.$transaction(async (tx) => {
+          await tx.message.create({
+            data: {
+              ticket_id: existing.id,
+              body,
+              sender_type: 'CUSTOMER',
+              sent_at: now,
+              inbound_source_id,
+            },
+          })
+          await tx.ticket.update({
+            where: { id: existing.id },
+            data: {
+              last_customer_reply_at: now,
+              last_updated_at: now,
+              summary: null,
+              ...(shouldReopen && { status: 'OPEN' }),
+              ...(wasAiResolved && { assigned_to_id: null, is_ai_handled: false }),
+            },
+          })
+        })
+        return { ticket_id: existing.id, action: 'message_added' }
+      }
+    }
+
+    const ticket = await prisma.$transaction(async (tx) => {
+      const createdTicket = await tx.ticket.create({
+        data: {
+          subject,
+          customer_name: from_name ?? from_email,
+          customer_email: from_email,
+          email_thread_id: message_id ?? null,
+          status: 'AI_PROCESSING',
+          last_customer_reply_at: now,
+          last_updated_at: now,
+        },
+      })
+      await tx.message.create({
+        data: {
+          ticket_id: createdTicket.id,
+          body,
+          sender_type: 'CUSTOMER',
+          sent_at: now,
+          inbound_source_id,
+        },
+      })
+      const jobId = await boss.send(PROCESS_QUEUE, {
+        ticketId: createdTicket.id,
+        customerName: createdTicket.customer_name,
         subject,
-        customer_name: from_name ?? from_email,
-        customer_email: from_email,
-        email_thread_id: message_id ?? null,
-        status: 'AI_PROCESSING',
-        last_customer_reply_at: now,
-        last_updated_at: now,
-      },
+        body,
+      }, { db: fromPrisma(tx) })
+      if (!jobId) {
+        throw new Error(`pg-boss returned no job ID for inbound ticket ${createdTicket.id}`)
+      }
+      return createdTicket
     })
-    await tx.message.create({
-      data: { ticket_id: t.id, body, sender_type: 'CUSTOMER', sent_at: now },
-    })
-    return t
-  })
 
-  boss.send(PROCESS_QUEUE, {
-    ticketId: ticket.id,
-    customerName: ticket.customer_name,
-    subject,
-    body,
-  }).catch((err) => console.error('[boss] enqueue failed for ticket', ticket.id, err))
-
-  return { ticket_id: ticket.id, action: 'ticket_created' }
+    return { ticket_id: ticket.id, action: 'ticket_created' }
+  } catch (error) {
+    if (inbound_source_id && isUniqueConstraintViolation(error)) {
+      const existingResult = await findExistingInboundResult(inbound_source_id)
+      if (existingResult) return existingResult
+    }
+    throw error
+  }
 }
 
 // ─── legacy webhook (custom X-Webhook-Secret, used for local testing) ─────────
@@ -152,7 +232,10 @@ export async function inboundEmail(req: Request, res: Response, next: NextFuncti
       return res.status(400).json({ error: parsed.error.issues[0].message })
     }
 
-    const result = await processInboundEmail(parsed.data)
+    const result = await processInboundEmail({
+      ...parsed.data,
+      inbound_source_id: createLegacyInboundSourceId(parsed.data.message_id),
+    })
     return result.action === 'ticket_created'
       ? res.status(201).json(result)
       : res.json(result)
@@ -255,5 +338,6 @@ export async function processResendEvent(event: ResendEvent) {
     message_id: messageId,
     in_reply_to: inReplyTo,
     references,
+    inbound_source_id: createResendInboundSourceId(event.data.email_id),
   })
 }

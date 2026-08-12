@@ -201,6 +201,96 @@ apiTest.describe('inbound email webhook', () => {
 })
 
 test.describe('customer email replies', () => {
+  test('deduplicates the same first-contact delivery', async ({
+    adminPage: page,
+    request,
+  }) => {
+    const messageId = uniqueMessageId()
+    const subject = `E2E Idempotent First Contact ${Date.now()}`
+    const payload = {
+      from_email: 'alice@example.com',
+      from_name: 'Alice Smith',
+      subject,
+      body: 'This first-contact delivery should only be stored once.',
+      message_id: messageId,
+    }
+
+    const firstRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: payload,
+    })
+    const secondRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: payload,
+    })
+
+    expect(firstRes.status()).toBe(201)
+    expect(secondRes.status()).toBe(201)
+    const firstResult = await firstRes.json()
+    const secondResult = await secondRes.json()
+    expect(secondResult.ticket_id).toBe(firstResult.ticket_id)
+
+    await waitForTicketSettled(page, firstResult.ticket_id)
+    const listRes = await page.request.get(
+      `http://localhost:3001/api/tickets?search=${encodeURIComponent(subject)}&pageSize=100`,
+    )
+    expect(listRes.ok()).toBe(true)
+    const list = await listRes.json()
+    expect(list.total).toBe(1)
+
+    const ticketRes = await page.request.get(
+      `http://localhost:3001/api/tickets/${firstResult.ticket_id}`,
+    )
+    expect(ticketRes.ok()).toBe(true)
+    const ticket = await ticketRes.json()
+    expect(
+      ticket.messages.filter(
+        (message: { sender_type: string }) => message.sender_type === 'CUSTOMER',
+      ),
+    ).toHaveLength(1)
+  })
+
+  test('deduplicates the same reply delivery', async ({ adminPage: page, request }) => {
+    const { res, messageId } = await createTicketViaWebhook(request)
+    const { ticket_id } = await res.json()
+    await waitForTicketSettled(page, ticket_id)
+    const replyBody = `Idempotent customer reply ${Date.now()}`
+    const replyPayload = {
+      from_email: 'alice@example.com',
+      subject: 'Re: Help with my account',
+      body: replyBody,
+      message_id: uniqueMessageId(),
+      in_reply_to: messageId,
+      references: messageId,
+    }
+
+    const firstReplyRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: replyPayload,
+    })
+    const secondReplyRes = await request.post(WEBHOOK_URL, {
+      headers: { 'X-Webhook-Secret': WEBHOOK_SECRET },
+      data: replyPayload,
+    })
+
+    expect(firstReplyRes.status()).toBe(200)
+    expect(secondReplyRes.status()).toBe(200)
+    const firstResult = await firstReplyRes.json()
+    const secondResult = await secondReplyRes.json()
+    expect(firstResult.ticket_id).toBe(ticket_id)
+    expect(secondResult.ticket_id).toBe(ticket_id)
+
+    const ticketRes = await page.request.get(`http://localhost:3001/api/tickets/${ticket_id}`)
+    expect(ticketRes.ok()).toBe(true)
+    const ticket = await ticketRes.json()
+    expect(
+      ticket.messages.filter(
+        (message: { sender_type: string; body: string }) =>
+          message.sender_type === 'CUSTOMER' && message.body === replyBody,
+      ),
+    ).toHaveLength(1)
+  })
+
   test('reopens a closed ticket', async ({ adminPage: page, request }) => {
     const { res, messageId } = await createTicketViaWebhook(request)
     const { ticket_id } = await res.json()

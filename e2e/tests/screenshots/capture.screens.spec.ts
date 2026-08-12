@@ -18,10 +18,26 @@ async function settle(page: Page, ...stableElements: Locator[]): Promise<void> {
 }
 
 async function capture(page: Page, filename: string): Promise<void> {
-  await page.screenshot({
-    path: path.join(outDir, filename),
-    fullPage: true,
-  })
+  const viewport = page.viewportSize() ?? { width: 1440, height: 900 }
+  const documentHeight = await page.evaluate(() => document.documentElement.scrollHeight)
+
+  try {
+    if (documentHeight > viewport.height) {
+      await page.setViewportSize({
+        width: viewport.width,
+        height: Math.ceil(documentHeight),
+      })
+      await page.waitForLoadState('networkidle', { timeout: settleTimeout })
+      await page.waitForTimeout(1600)
+    }
+
+    await page.screenshot({
+      path: path.join(outDir, filename),
+      fullPage: true,
+    })
+  } finally {
+    await page.setViewportSize(viewport)
+  }
 }
 
 test('captures the admin dashboard', async ({ page }) => {

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isStubAiAllowed } from './deployment-flags.ts'
 
 export const processSchema = z.object({
   customerName: z.string(),
@@ -26,7 +27,10 @@ if (configuredProvider !== 'openai' && configuredProvider !== 'stub') {
   throw new Error('AI_PROVIDER must be either "openai" or "stub"')
 }
 
-if (process.env.NODE_ENV === 'production' && configuredProvider === 'stub') {
+if (
+  configuredProvider === 'stub' &&
+  !isStubAiAllowed(process.env.NODE_ENV, process.env.ALLOW_STUB_AI)
+) {
   throw new Error('AI_PROVIDER=stub is not allowed in production')
 }
 

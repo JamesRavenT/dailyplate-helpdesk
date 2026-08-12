@@ -1,4 +1,5 @@
 import { getResendClient } from './resend.ts'
+import { isEmailDeliveryEnabled } from './deployment-flags.ts'
 
 const FROM = `DailyPlate Support <${process.env.RESEND_FROM_EMAIL ?? 'support@dailyplate.help'}>`
 
@@ -21,8 +22,8 @@ export async function sendReplyToCustomer(opts: {
     extraHeaders['References'] = emailThreadId
   }
 
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`[email] dev mode — skipping send to ${customerEmail} (${replySubject})`)
+  if (!isEmailDeliveryEnabled(process.env.NODE_ENV, process.env.EMAIL_DELIVERY_ENABLED)) {
+    console.log(`[email] delivery disabled — skipping send to ${customerEmail} (${replySubject})`)
     return
   }
 

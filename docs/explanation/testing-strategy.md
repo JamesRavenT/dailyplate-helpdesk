@@ -10,20 +10,24 @@ Pure backend functions with no database or network are tested with Bun's built-i
 dependency. Test files sit next to the source as `<name>.test.ts`. Run from `backend/`:
 
 ```bash
-bun test                 # currently 18 tests
+bun test                 # currently 36 tests
 ```
 
-**Covered here:** email quote stripping (`stripEmailQuotes`, `stripHtml`) and reply sign-off
-normalization (`normalizeSignOff`). These are text transformations with many edge cases — wrapped
-attributions, nested HTML quote containers, entity decoding, idempotency — and exercising them
-through a browser and a database would be slower and prove less.
+**Covered here:** email quote stripping (`stripEmailQuotes`, `stripHtml`), reply sign-off
+normalization (`normalizeSignOff`), inbound source-id derivation, the pg-boss pool configuration
+and its production guard, the triage worker's health derivation, and its retry-safety wrapper.
+The text transformations have many edge cases — wrapped attributions, nested HTML quote
+containers, entity decoding, idempotency — and exercising them through a browser and a database
+would be slower and prove less. The worker logic is pure by construction: `deriveBossStatus` takes
+a snapshot struct and `processJobWithRetrySafety` takes injected operations, so both are tested
+without a queue or a database.
 
 ## Layer 1 — Component tests (Vitest + React Testing Library)
 
 Test files sit next to the component as `<Name>.test.tsx`. Run from `frontend/`:
 
 ```bash
-npm run test:component   # CI run (currently 131 tests)
+npm run test:component   # CI run (currently 186 tests)
 npm run test:watch       # watch mode
 ```
 
@@ -89,16 +93,68 @@ For test startup, Bun loads only the explicit `backend/.env.test.example` passed
 A separate, opt-in Playwright project targets a live deployed URL (`DEPLOYED_BASE_URL`) to
 verify the Cloudflare → Render path after a deploy: `/health` returns JSON (not the SPA),
 sign-in sets a cookie on the Cloudflare host, the follow-up request is authenticated, redirects
-never expose the Render origin (`*.onrender.com`), and a deep link loads. Playwright's
-`webServer` configuration is global, so selecting only `deploy-smoke` still starts the local
-backend and frontend even though the smoke requests target `DEPLOYED_BASE_URL`. The project is
-run manually or in CI after deployment; its assertions target the deployed stack. Global setup
-also still runs, so the local `postgres-test` service is required with the current configuration.
+never expose the Render origin (`*.onrender.com`), and a deep link loads. The project is run
+manually or by the `deploy-smoke` workflow after a deploy; its assertions target the deployed
+stack.
+
+Set **`SMOKE_ONLY=1`** for these runs. Playwright applies `webServer` and `globalSetup` to every
+project, so without it a smoke run boots a local backend and frontend that no test contacts, and
+`global-setup.ts` tries to push the Prisma schema into a `postgres-test` database that a
+deploy-verification job has no reason to run. `SMOKE_ONLY=1` empties both, which is what lets CI
+skip the Postgres service and the backend, Prisma and frontend installs entirely. It is guarded:
+without `DEPLOYED_BASE_URL` the config throws rather than silently sending every request to a
+`localhost` that isn't listening.
+
+```bash
+# bash/zsh
+SMOKE_ONLY=1 DEPLOYED_BASE_URL=https://dailyplate.help npx playwright test --project=deploy-smoke
+
+# PowerShell
+$env:SMOKE_ONLY='1'; $env:DEPLOYED_BASE_URL='https://dailyplate.help'; npx playwright test --project=deploy-smoke
+```
+
+The access gate needs no key here — `tests/fixtures/accessGate.ts` intercepts the verifier call
+and seeds local storage. The sign-in test skips itself unless `SMOKE_ADMIN_EMAIL` and
+`SMOKE_ADMIN_PASSWORD` are set, so a run without them reports 3 passed, 1 skipped.
 
 > **Free-tier caveat:** a Render free instance spins down after ~15 minutes of inactivity and
 > takes ~30–60s to wake. Hit the deployed `/health` once and wait for a `200` before running the
 > smoke project, otherwise the first test can fail on a cold-start timeout rather than a real
 > regression.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the layers above on every pull request and every push to `main`.
+The split follows the same principle as the test layering — put each check where it is cheapest.
+
+| Job | Runs on | Typical duration |
+|---|---|---|
+| Backend unit tests + `tsc --noEmit` | every PR | ~20s |
+| Component tests + production build | every PR | ~45s |
+| Migrations applied to an empty database, then a drift check | every PR | ~25s |
+| Full Playwright suite (chromium + bdd) | push to `main`, or a PR labelled `run-e2e` | ~3m |
+
+**Why e2e doesn't gate every PR.** It downloads a browser, provisions Postgres, boots two dev
+servers and runs serially (`workers: 1`), which is minutes rather than seconds. Running it on
+`main` catches regressions before they can reach a release, while PR feedback stays under a
+minute. Label a PR `run-e2e` when the change touches the webhook, worker or auth paths where a
+mock cannot tell you the truth.
+
+**The migrations job** applies `prisma/migrations` to an empty database and then runs
+`prisma migrate diff --from-config-datasource --to-schema`. A non-empty diff means `schema.prisma`
+was edited without generating a migration — cheap to catch here, expensive to discover when a
+deploy runs `migrate deploy` against production.
+
+**Ordering constraint.** Playwright starts `webServer` *before* `globalSetup`, so CI must create
+the schema itself before invoking Playwright: on an empty database the backend boots with no
+tables, and because `startBoss()` runs before `app.listen()`, `ensureAiUser()` exits the process
+and takes the run down. A development database already has the tables, so this only appears on a
+genuinely fresh database.
+
+Deploys are not driven from Actions — Cloudflare Workers Builds and Render both build from `main`
+directly. `deploy-smoke.yml` waits for the deployed `/health` to return 200, then runs the smoke
+project described above. See [how-to/deploy.md](../how-to/deploy.md#7-continuous-integration-and-deploy-verification)
+for the repository variables and secrets it needs.
 
 ## Reporting
 

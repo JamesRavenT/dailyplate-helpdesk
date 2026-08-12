@@ -9,6 +9,8 @@ an AI reply assistant at their side.
 > questions while making sure anything account-specific or sensitive reaches a real agent —
 > with the whole conversation kept inside one email thread.
 
+[![CI](https://github.com/JamesRavenT/dailyplate-helpdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/JamesRavenT/dailyplate-helpdesk/actions/workflows/ci.yml)
+
 **Status:** v1.1.0 — actively developed portfolio project. Not affiliated with any real brand.
 
 ---
@@ -293,10 +295,10 @@ Log in at `/login` with your `SEED_ADMIN_*` credentials.
 ## Testing
 
 ```bash
-# Backend unit tests (bun) — 18 tests
+# Backend unit tests (bun) — 36 tests
 cd backend && bun test
 
-# Component tests (Vitest + React Testing Library) — 131 tests
+# Component tests (Vitest + React Testing Library) — 186 tests
 cd frontend && npm run test:component     # CI run
 cd frontend && npm run test:watch         # watch mode
 
@@ -338,6 +340,20 @@ Production runs across three managed services plus one self-hosted automation no
 
 Full step-by-step instructions, the environment-variable reference, and the n8n workflow setup
 are in **[docs/how-to/deploy.md](./docs/how-to/deploy.md)**.
+
+### CI/CD
+
+Cloudflare and Render each build from `main` on their own, so GitHub Actions tests and verifies
+rather than deploys:
+
+- **`ci.yml`** — every pull request runs the backend unit tests and typecheck, the component
+  tests and production build, and a migration drift check that fails if `schema.prisma` was
+  changed without a matching migration. The full Playwright suite runs on pushes to `main`, or on
+  a PR labelled `run-e2e`.
+- **`deploy-smoke.yml`** — after a push to `main`, waits for the deployed `/health` to return
+  `200`, then runs the smoke project against the live site: `/health` serves JSON rather than the
+  SPA, sign-in sets a first-party cookie, redirects never leak the Render origin, and deep links
+  resolve through the SPA fallback.
 
 ---
 

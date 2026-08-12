@@ -190,6 +190,63 @@ See [`n8n/README.md`](../../n8n/README.md) for the full node-by-node breakdown.
 
 ---
 
+## 7. Continuous integration and deploy verification
+
+Two GitHub Actions workflows live in [`.github/workflows/`](../../.github/workflows/). They do
+**not** deploy — Cloudflare Workers Builds and Render each build from `main` on their own. Actions
+tests changes and verifies the result.
+
+- **`ci.yml`** needs no configuration. Backend tests, component tests, the production build and a
+  migration drift check run on every pull request; the full Playwright suite runs on pushes to
+  `main` and on any PR labelled `run-e2e`.
+- **`deploy-smoke.yml`** waits for the deployed `/health` to return 200, then runs the
+  `deploy-smoke` Playwright project against the live site. It needs the settings below. Without
+  them it logs a warning and skips, so an unconfigured fork stays green.
+
+### Arm the smoke workflow
+
+`DEPLOYED_BASE_URL` is a public URL, so it belongs in **variables**, not secrets — variables are
+readable in logs, which makes a misconfigured URL obvious instead of masked as `***`. The admin
+credentials are secrets.
+
+From the repository root, with the [`gh` CLI](https://cli.github.com) authenticated:
+
+```bash
+# Public — Settings → Secrets and variables → Actions → Variables
+gh variable set DEPLOYED_BASE_URL --body "https://dailyplate.help"
+
+# Secret — the smoke suite signs in with these to prove auth works end to end
+gh secret set SMOKE_ADMIN_EMAIL
+gh secret set SMOKE_ADMIN_PASSWORD
+```
+
+Or set them in the GitHub UI under **Settings → Secrets and variables → Actions**.
+
+Use a **dedicated smoke account**, not your own admin login: the workflow signs in on every push
+to `main`, and a password that lives in CI should be one you can rotate without locking yourself
+out. Create it against the production database — seeding creates only `SEED_ADMIN_EMAIL`, so add
+the smoke user explicitly and give it the ADMIN role, since the test asserts a `200` from
+`/api/users`.
+
+Until both secrets exist, the sign-in test skips itself and the run reports 3 passed, 1 skipped —
+the deployment is still verified, just not its authentication.
+
+### Run it on demand
+
+The workflow accepts a URL override, which is the quickest way to smoke a deployment without
+committing anything:
+
+```bash
+gh workflow run "Deploy smoke" --ref main -f base_url=https://dailyplate.help
+gh run watch "$(gh run list --workflow='Deploy smoke' --limit 1 --json databaseId --jq '.[0].databaseId')"
+```
+
+> **Cold starts:** the workflow polls `/health` for up to 15 minutes before giving up, which
+> covers a Render free-plan wake-up and a rebuild. `/health` also returns `503` while the pg-boss
+> worker is unhealthy, so a pass means the queue is running, not just that the process is up.
+
+---
+
 ## Before you go live — security checklist
 
 - [ ] **Rotate** the OpenAI and Resend API keys if any dev value was ever exposed.

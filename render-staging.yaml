@@ -1,0 +1,61 @@
+# Render Blueprint — DailyPlate Helpdesk STAGING backend.
+#
+# Deliberately a separate file from render.yaml, which owns production. Applying a
+# Blueprint reconciles every service it declares, so keeping the two apart means a
+# staging sync can never redeploy or re-declare the production service.
+#
+# The staging service was created by hand first and this file was written to match it,
+# so treat render.yaml as the production source of truth and this as staging's.
+# Syncing this Blueprint against the existing service should be a no-op; check the
+# diff Render proposes before applying, and never point it at the production service.
+#
+# Staging holds no third-party credentials at all. AI_PROVIDER=stub with
+# ALLOW_STUB_AI=true means no OpenAI key is needed, and EMAIL_DELIVERY_ENABLED=false
+# means no Resend key is needed — see backend/src/lib/deployment-flags.ts. Nothing in
+# this environment can spend money or email a real person.
+services:
+  - type: web
+    name: dailyplate-helpdesk-staging
+    runtime: docker
+    plan: free
+    branch: develop
+    region: virginia
+    dockerfilePath: ./backend/Dockerfile.prod
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      # Staging runs as production on purpose: it must exercise the same guards —
+      # the unpooled-connection requirement, the internal-token check, the disabled
+      # legacy webhook route, the stricter sign-in rate limit. The two flags below
+      # are what keep the side effects out.
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: AI_PROVIDER
+        value: stub
+      - key: ALLOW_STUB_AI
+        value: 'true'
+      - key: EMAIL_DELIVERY_ENABLED
+        value: 'false'
+      - key: BETTER_AUTH_URL
+        value: https://staging.dailyplate.help
+      - key: FRONTEND_URL
+        value: https://staging.dailyplate.help
+      # Staging's own Neon project, not a branch of production — empty at creation,
+      # so no production rows or pg-boss jobs were ever copied into it.
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      # Must differ from production. A leaked staging token must not open the
+      # production internal API, and a staging session must not verify there.
+      - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: INTERNAL_API_TOKEN
+        sync: false
+      # Also the deploy-smoke credentials — this admin exists only in staging.
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false

@@ -190,60 +190,100 @@ See [`n8n/README.md`](../../n8n/README.md) for the full node-by-node breakdown.
 
 ---
 
-## 7. Continuous integration and deploy verification
+## 7. Branches, staging, and the release gate
 
-Two GitHub Actions workflows live in [`.github/workflows/`](../../.github/workflows/). They do
-**not** deploy — Cloudflare Workers Builds and Render each build from `main` on their own. Actions
-tests changes and verifies the result.
+There are two deployed environments and two long-lived branches:
+
+| Branch | Deploys to | Database | Purpose |
+|---|---|---|---|
+| `develop` | staging — `staging.dailyplate.help` | its own Neon project | integration; everything lands here first |
+| `main` | production — `dailyplate.help` | Neon production | release; only reached by promotion |
+
+Day-to-day PRs target **`develop`**. Releasing means running the **Promote develop to main**
+workflow, which fast-forwards `main` — and since Cloudflare and Render build `main` automatically,
+that fast-forward *is* the production release.
+
+Staging deliberately holds **no third-party credentials**: `AI_PROVIDER=stub` with
+`ALLOW_STUB_AI=true` removes the need for an OpenAI key, and `EMAIL_DELIVERY_ENABLED=false`
+removes the need for a Resend key (see `backend/src/lib/deployment-flags.ts`). It still runs
+`NODE_ENV=production`, so it exercises the same hardening as production. n8n and Resend inbound
+remain pointed exclusively at production; staging has no email pipeline.
+
+The staging backend is described by [`render-staging.yaml`](../../render-staging.yaml) — a
+separate Blueprint from production's, because applying a Blueprint reconciles every service it
+declares.
+
+## 8. Continuous integration and deploy verification
+
+Three workflows live in [`.github/workflows/`](../../.github/workflows/). They do **not** deploy —
+Cloudflare Workers Builds and Render own that. Actions tests, verifies, and decides what gets
+promoted.
 
 - **`ci.yml`** needs no configuration. Backend tests, component tests, the production build and a
   migration drift check run on every pull request; the full Playwright suite runs on pushes to
-  `main` and on any PR labelled `run-e2e`.
-- **`deploy-smoke.yml`** waits for the deployed `/health` to return 200, then runs the
-  `deploy-smoke` Playwright project against the live site. It needs the settings below. Without
-  them it logs a warning and skips, so an unconfigured fork stays green.
+  `develop` and `main`, and on any PR labelled `run-e2e`.
+- **`deploy-smoke.yml`** waits for the deployed `/health` to report the *triggering commit* — not
+  merely a `200`, since the revision being replaced keeps answering during a deploy — then runs
+  the `deploy-smoke` Playwright project. It takes two asymmetric targets: `develop` verifies
+  staging with the full suite **including the authenticated sign-in test**, while `main` runs a
+  **read-only canary** against production with no credentials supplied, so the sign-in test skips
+  itself. That is how the authenticated path stays covered without any admin credential for the
+  live system existing in CI.
+- **`promote.yml`** is the release gate. It refuses to fast-forward `main` unless both `ci.yml`
+  and `deploy-smoke.yml` concluded successfully **for that exact commit** on `develop`. Matching
+  the SHA rather than "the latest run" is what stops a green result for an older commit from
+  authorising a newer one.
 
-### Arm the smoke workflow
+Branch protection backs this up: `main` requires the four CI checks *and* `Smoke test staging`, so
+a commit that never passed through staging cannot reach production even without the workflow.
+Force pushes and deletions are blocked on both branches.
 
-`DEPLOYED_BASE_URL` is a public URL, so it belongs in **variables**, not secrets — variables are
-readable in logs, which makes a misconfigured URL obvious instead of masked as `***`. The admin
+### Repository variables and secrets
+
+Base URLs are public, so they belong in **variables**, not secrets — variables stay readable in
+logs, which makes a misconfigured URL obvious instead of masked as `***`. Only the staging admin
 credentials are secrets.
 
-From the repository root, with the [`gh` CLI](https://cli.github.com) authenticated:
-
 ```bash
-# Public — Settings → Secrets and variables → Actions → Variables
-gh variable set DEPLOYED_BASE_URL --body "https://dailyplate.help"
+# Variables — Settings → Secrets and variables → Actions → Variables
+gh variable set STAGING_BASE_URL    --body "https://staging.dailyplate.help"
+gh variable set PRODUCTION_BASE_URL --body "https://dailyplate.help"
 
-# Secret — the smoke suite signs in with these to prove auth works end to end
-gh secret set SMOKE_ADMIN_EMAIL
+# Secrets — used against STAGING ONLY; the production canary runs without them
+gh secret set SMOKE_ADMIN_EMAIL     # staging-admin@dailyplate.example
 gh secret set SMOKE_ADMIN_PASSWORD
 ```
 
-Or set them in the GitHub UI under **Settings → Secrets and variables → Actions**.
+The smoke account is staging's `SEED_ADMIN_EMAIL`, which the seed already creates with the ADMIN
+role — the sign-in test asserts a `200` from `/api/users`, which is behind `requireAdmin`. Because
+it exists only in the staging database, it grants nothing on production and can be rotated by
+re-seeding. **No production admin credential is needed anywhere in CI**, which was the point of
+splitting the targets.
 
-Use a **dedicated smoke account**, not your own admin login: the workflow signs in on every push
-to `main`, and a password that lives in CI should be one you can rotate without locking yourself
-out. Create it against the production database — seeding creates only `SEED_ADMIN_EMAIL`, so add
-the smoke user explicitly and give it the ADMIN role, since the test asserts a `200` from
-`/api/users`.
-
-Until both secrets exist, the sign-in test skips itself and the run reports 3 passed, 1 skipped —
-the deployment is still verified, just not its authentication.
+Without these the workflow logs a warning and skips rather than failing, so a fork stays green.
 
 ### Run it on demand
 
-The workflow accepts a URL override, which is the quickest way to smoke a deployment without
+Both workflows accept a URL override, which is the quickest way to smoke a deployment without
 committing anything:
 
 ```bash
 gh workflow run "Deploy smoke" --ref main -f base_url=https://dailyplate.help
-gh run watch "$(gh run list --workflow='Deploy smoke' --limit 1 --json databaseId --jq '.[0].databaseId')"
+gh workflow run "Promote develop to main"
 ```
 
-> **Cold starts:** the workflow polls `/health` for up to 15 minutes before giving up, which
-> covers a Render free-plan wake-up and a rebuild. `/health` also returns `503` while the pg-boss
-> worker is unhealthy, so a pass means the queue is running, not just that the process is up.
+> **Cold starts:** the smoke workflow polls `/health` for up to 20 minutes before giving up,
+> which covers a Render free-plan wake-up plus a rebuild. `/health` also returns `503` while the
+> pg-boss worker is unhealthy, so a pass means the queue is running, not just that the process is
+> up. It reports the running commit via Render's `RENDER_GIT_COMMIT`, which is what lets the
+> workflow tell a finished deploy from the previous revision still answering.
+
+### Known gap: the frontend deploy is not commit-verified
+
+`/health` reports the **backend** commit. The Cloudflare Worker exposes no equivalent, so a
+stalled or failed frontend build is not detected by the smoke suite — it would test a current
+backend behind a stale SPA. For production, the `Workers Builds: helpdesk-web` check run on the
+commit is the signal to watch until this is closed.
 
 ---
 

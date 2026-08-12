@@ -18,5 +18,17 @@
   "routes": [
     { "pattern": "dailyplate.help", "custom_domain": true },
     { "pattern": "www.dailyplate.help", "custom_domain": true }
-  ]
+  ],
+  "env": {
+    // This routes override is mandatory because routes are inheritable and would otherwise claim the production domains.
+    "staging": {
+      "name": "helpdesk-web-staging",
+      "vars": {
+        "BACKEND_ORIGIN": "https://dailyplate-helpdesk-staging.onrender.com"
+      },
+      "routes": [
+        { "pattern": "staging.dailyplate.help", "custom_domain": true }
+      ]
+    }
+  }
 }

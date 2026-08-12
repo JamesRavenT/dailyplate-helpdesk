@@ -15,6 +15,8 @@ coverage/
 .env.*
 !.env.example
 !.env.*.example
+# Contains only the public Blackbox project identifier.
+!frontend/.env.staging
 .dev.vars
 .dev.vars.*
 

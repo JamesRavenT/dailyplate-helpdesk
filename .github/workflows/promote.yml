@@ -88,6 +88,30 @@ jobs:
           done
           [ "$failed" -eq 0 ] || exit 1
 
+      # The backend and frontend deploy to staging independently — Render from the
+      # branch, Cloudflare via Workers Builds. Without this check the gate would
+      # verify a commit whose backend reached staging while its frontend did not,
+      # and the smoke suite would have tested a current API behind a stale SPA.
+      - name: Require the staging frontend to have built for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          check=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
+            --jq '[.check_runs[] | select(.name == "Workers Builds: helpdesk-web-staging")] | first')
+
+          if [ -z "$check" ] || [ "$check" = "null" ]; then
+            echo "::error::No staging Workers Builds run found for $SHA. The staging frontend has not been built from this commit."
+            exit 1
+          fi
+
+          result=$(echo "$check" | jq -r '.conclusion')
+          if [ "$result" != "success" ]; then
+            echo "::error::The staging frontend build concluded '$result' for $SHA — $(echo "$check" | jq -r '.details_url')"
+            exit 1
+          fi
+          echo "Staging frontend built successfully for $SHA."
+
       - name: Fast-forward main
         env:
           SHA: ${{ steps.candidate.outputs.sha }}

@@ -32,7 +32,9 @@ export default defineConfig({
     ['html'],
     ['allure-playwright', { resultsDir: 'allure-results', detail: true }],
   ],
-  globalSetup: './global-setup.ts',
+  // Top-level globalSetup and webServer apply to every project, so smoke-only
+  // runs against a deployed target must skip local setup they never use.
+  globalSetup: smokeOnly ? undefined : './global-setup.ts',
   use: {
     baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
@@ -78,8 +80,6 @@ export default defineConfig({
       },
     },
   ],
-  // Top-level webServer applies to every project, so smoke-only runs against a
-  // deployed target must not boot local servers they never talk to.
   webServer: smokeOnly ? [] : [
     {
       command: 'bun run --env-file=.env.test.example src/index.ts',

@@ -197,6 +197,16 @@ jobs:
         working-directory: e2e
         run: npx playwright install --with-deps chromium
 
+      # Playwright starts config.webServer *before* globalSetup, so on a fresh database
+      # the backend boots with no tables and now exits non-zero (startBoss runs before
+      # app.listen). global-setup does the same work again, idempotently, a moment later
+      # — this step exists purely to get the schema in place before the server starts.
+      - name: Prepare the test database
+        working-directory: backend
+        run: |
+          bun --env-file=.env.test.example node_modules/prisma/build/index.js db push --accept-data-loss
+          bun run --env-file=.env.test.example prisma/seed-test.ts
+
       # global-setup pushes the schema and seeds the test users; the config starts the
       # backend and frontend itself. Generating the BDD specs first lets both suites
       # share one pair of dev servers.

@@ -11,6 +11,7 @@ import { internalRouter } from './routes/internal.ts'
 import { errorHandler } from './middleware/errorHandler.ts'
 import { requireInternalToken } from './middleware/internal.ts'
 import { getBossStatus, startBoss } from './lib/triage.ts'
+import { deriveHealthResponse } from './lib/health.ts'
 
 const app = express()
 const port = process.env.PORT ?? 3001
@@ -67,25 +68,14 @@ app.use(express.json({ limit: '100kb' }))
 app.use(express.urlencoded({ extended: true, limit: '100kb' }))
 
 app.get('/health', (_req, res) => {
-  const timestamp = new Date().toISOString()
-  const bossStatus = getBossStatus()
-  const worker = {
-    status: bossStatus.status,
-    lastFetchAt: bossStatus.lastFetchAt,
-    lastSweepAt: bossStatus.lastSweepAt,
-    ...(bossStatus.reason && { reason: bossStatus.reason }),
-  }
+  const now = new Date()
+  const { statusCode, body } = deriveHealthResponse({
+    bossStatus: getBossStatus(),
+    now,
+    commit: process.env.RENDER_GIT_COMMIT,
+  })
 
-  if (bossStatus.status === 'unhealthy') {
-    return res.status(503).json({
-      status: 'unhealthy',
-      timestamp,
-      reason: bossStatus.reason,
-      worker,
-    })
-  }
-
-  return res.json({ status: 'ok', timestamp, worker })
+  return res.status(statusCode).json(body)
 })
 
 app.use('/api', router)

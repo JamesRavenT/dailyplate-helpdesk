@@ -49,29 +49,71 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Render's free plan rebuilds the container and cold-starts it, so the previous
-      # revision can keep answering for a while. /health also returns 503 whenever the
-      # pg-boss worker is unhealthy, so only a 200 counts as ready.
+      # Render's free plan rebuilds the container and cold-starts it, and the previous
+      # revision keeps answering throughout — so a 200 alone only proves *something* is
+      # up. On a push we additionally wait for /health to report the triggering commit
+      # (Render injects RENDER_GIT_COMMIT), otherwise the suite can pass against the
+      # revision it was meant to replace. /health also 503s while the pg-boss worker is
+      # unhealthy, so only a 200 counts as ready either way.
+      #
+      # A manual dispatch may target any deployment, so it asserts liveness only.
       - name: Wait for the deployment to become healthy
         if: steps.target.outputs.configured == 'true'
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
         run: |
-          deadline=$(( $(date +%s) + 900 ))
+          if [ -n "$EXPECTED_SHA" ]; then
+            echo "Waiting for commit $EXPECTED_SHA at $DEPLOYED_BASE_URL"
+          else
+            echo "Waiting for any healthy response at $DEPLOYED_BASE_URL (commit not enforced)"
+          fi
+
+          # github.sha is the full 40-char SHA; a platform may report an abbreviated
+          # one. Treat either being a prefix of the other as a match, with a 7-char
+          # floor so a truncated or empty value cannot match everything.
+          sha_matches() {
+            live="$1"; want="$2"
+            [ ${#live} -ge 7 ] || return 1
+            case "$want" in "$live"*) return 0 ;; esac
+            case "$live" in "$want"*) return 0 ;; esac
+            return 1
+          }
+
+          deadline=$(( $(date +%s) + 1200 ))
           attempt=0
+          last_commit=""
+          saw_healthy=false
+
           until [ "$(date +%s)" -ge "$deadline" ]; do
             attempt=$(( attempt + 1 ))
             status=$(curl -sS -o /tmp/health.json -w '%{http_code}' \
               -H 'Cache-Control: no-cache' \
               "$DEPLOYED_BASE_URL/health?ci=$(date +%s)" || echo 000)
+
             if [ "$status" = "200" ]; then
-              echo "Healthy after $attempt attempt(s):"
-              cat /tmp/health.json
-              exit 0
+              saw_healthy=true
+              last_commit=$(jq -r '.commit // empty' /tmp/health.json 2>/dev/null || echo '')
+
+              if [ -z "$EXPECTED_SHA" ] || sha_matches "$last_commit" "$EXPECTED_SHA"; then
+                echo "Ready after $attempt attempt(s):"
+                cat /tmp/health.json
+                exit 0
+              fi
+
+              echo "Attempt $attempt: healthy, but running ${last_commit:-<no commit reported>}"
+            else
+              echo "Attempt $attempt: HTTP $status"
+              [ -s /tmp/health.json ] && cat /tmp/health.json
             fi
-            echo "Attempt $attempt: HTTP $status"
-            [ -s /tmp/health.json ] && cat /tmp/health.json
+
             sleep 15
           done
-          echo "::error::$DEPLOYED_BASE_URL/health did not return 200 within 15 minutes."
+
+          if [ "$saw_healthy" = true ]; then
+            echo "::error::$DEPLOYED_BASE_URL is healthy but still serving ${last_commit:-an unreported commit} after 20 minutes; expected $EXPECTED_SHA. The deploy may have failed or never started."
+          else
+            echo "::error::$DEPLOYED_BASE_URL/health did not return 200 within 20 minutes."
+          fi
           exit 1
 
       - uses: actions/setup-node@v7
